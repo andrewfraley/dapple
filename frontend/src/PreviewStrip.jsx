@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 
@@ -45,7 +45,12 @@ export default function PreviewStrip({ pattern, totalLeds, segments, known }) {
   const inner = Math.max(0, width - PADDING * 2)
   const columns = Math.max(1, Math.floor(inner / TARGET_PITCH))
   const pitch = inner / columns
-  const blocks = segments.map((segment) => Math.ceil(segment.number_of_led / columns))
+  // Memoised: the draw effect depends on it, and a fresh array every render
+  // would repaint thousands of glowing dots on each live poll.
+  const blocks = useMemo(
+    () => segments.map((segment) => Math.ceil(segment.number_of_led / columns)),
+    [segments, columns],
+  )
   const height =
     PADDING * 2 +
     blocks.reduce((sum, rows) => sum + rows * pitch, 0) +

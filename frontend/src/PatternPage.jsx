@@ -150,9 +150,14 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
   // Until a strand answers we still want a preview, so fall back to a plausible
   // length rather than an empty bar.
   const previewLeds = group?.total_leds || FALLBACK_LEDS
-  const previewSegments = known
-    ? group.segments
-    : [{ name: 'preview', offset: 0, number_of_led: previewLeds, led_profile: 'RGB' }]
+  // Stable between renders, so the preview only redraws when something changed.
+  const previewSegments = useMemo(
+    () =>
+      known
+        ? group.segments
+        : [{ name: 'preview', offset: 0, number_of_led: previewLeds, led_profile: 'RGB' }],
+    [known, group?.segments, previewLeds],
+  )
 
   const totalWeight = useMemo(
     () => pattern.slots.reduce((sum, slot) => sum + slot.weight, 0),
