@@ -3,6 +3,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from app.actions import GroupActions
 from app.config import AppConfig, ConfigStore, DeviceConfig, MqttConfig, load_config
 from app.main import app
 from app.models import DeviceInfo, DeviceResult, StrandSegment
@@ -240,6 +241,7 @@ def build_client(config, manager, seed_presets=True):
     app.state.group_state = StateStore(config.state_path)
     app.state.strands = ConfigStore(config)
     app.state.mqtt = FakeBridge()
+    app.state.actions = GroupActions(manager, app.state.presets, app.state.group_state)
     manager.store = app.state.strands
     return TestClient(app)
 

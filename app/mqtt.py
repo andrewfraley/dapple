@@ -29,8 +29,7 @@ import aiomqtt
 from app.actions import GroupActions
 from app.config import ConfigStore, MqttConfig
 from app.models import DeviceInfo, GroupState
-from app.presets import PresetStore
-from app.state import StateStore, live_state
+from app.state import live_state
 
 log = logging.getLogger(__name__)
 
@@ -177,23 +176,25 @@ class MqttBridge:
     Configuration and preset changes call :meth:`config_changed`; anything that
     changes the lights calls :meth:`group_changed` via :class:`GroupActions`.
     Both are no-ops while disconnected — connecting republishes everything.
+
+    Commands from HA go through ``actions``, the same instance the HTTP routes
+    use, so there is one place that records state and notifies.
     """
 
     def __init__(
         self,
         strands: ConfigStore,
-        presets: PresetStore,
-        group_state: StateStore,
-        manager,
+        actions: GroupActions,
         *,
         version: str = "",
         client_factory: Callable[..., Any] | None = None,
         poll_interval: float = POLL_SECONDS,
     ):
         self.strands = strands
-        self.presets = presets
-        self.group_state = group_state
-        self.manager = manager
+        self.actions = actions
+        self.presets = actions.presets
+        self.group_state = actions.group_state
+        self.manager = actions.manager
         self.version = version
         self.client_factory = client_factory or aiomqtt.Client
         self.poll_interval = poll_interval
@@ -213,12 +214,6 @@ class MqttBridge:
     def settings(self) -> MqttConfig | None:
         return self.strands.config.mqtt
 
-    @property
-    def actions(self) -> GroupActions:
-        return GroupActions(
-            self.manager, self.presets, self.group_state, on_change=self.group_changed
-        )
-
     # ---- lifecycle ---------------------------------------------------------
 
     def start(self) -> None:
@@ -235,8 +230,10 @@ class MqttBridge:
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
-        for pending in list(self._pending):
-            pending.cancel()
+        pending = list(self._pending)
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
         self.status, self.error = "disabled", None
 
     async def restart(self) -> None:
@@ -257,14 +254,24 @@ class MqttBridge:
                 )
                 async with client:
                     await self._serve(client, topics, settings)
-            except aiomqtt.MqttError as exc:
-                error = (
-                    f"Could not talk to the MQTT broker at {settings.host}:{settings.port} "
-                    f"({exc}). Check the address and port, and the username and password "
-                    "if your broker needs them."
-                )
+            except Exception as exc:
+                # Anything, not just MqttError: a task that died here would sit
+                # at "connected" with nothing listening, and never come back.
+                if isinstance(exc, aiomqtt.MqttError):
+                    error = (
+                        f"Could not talk to the MQTT broker at {settings.host}:{settings.port} "
+                        f"({exc}). Check the address and port, and the username and password "
+                        "if your broker needs them."
+                    )
+                else:
+                    error = f"The Home Assistant connection failed ({type(exc).__name__}: {exc})."
                 if error != self.error:  # once per distinct failure, not every retry
-                    log.warning("%s Retrying every %ds.", error, int(RETRY_MAX_SECONDS))
+                    log.warning(
+                        "%s Retrying, backing off to once every %ds.",
+                        error,
+                        int(RETRY_MAX_SECONDS),
+                        exc_info=not isinstance(exc, aiomqtt.MqttError),
+                    )
                 self.status, self.error = "error", error
             else:
                 self.status = "connecting"
@@ -366,13 +373,18 @@ class MqttBridge:
             self._last.pop(topic, None)
         self._discovered.discard(group_id)
 
-    async def _publish_states(self, client, topics: Topics, force: bool = False) -> None:
-        infos = await self.manager.live_state()
+    async def _publish_states(
+        self, client, topics: Topics, force: bool = False, group_id: str | None = None
+    ) -> None:
+        """Every group's state, or just ``group_id``'s — reading a group means
+        asking each of its strands, so a change to one shouldn't ask them all."""
+        infos = await self.manager.live_state(group_id)
         by_group: dict[str, list[DeviceInfo]] = defaultdict(list)
         for info in infos:
             by_group[info.group].append(info)
         presets = set(self.presets.names())
-        for group in self.manager.groups:
+        groups = [self.manager.group(group_id)] if group_id else self.manager.groups
+        for group in groups:
             group_infos = by_group.get(group.id, [])
             state = state_payload(self.group_state.get(group.id), group_infos, presets)
             await self._publish_changed(
@@ -400,7 +412,7 @@ class MqttBridge:
 
     def group_changed(self, group_id: str) -> None:
         """A group's lights changed; tell HA once the strands have settled."""
-        self._spawn(lambda client, topics: self._publish_states(client, topics))
+        self._spawn(lambda client, topics: self._publish_states(client, topics, group_id=group_id))
 
     def config_changed(self) -> None:
         """Groups or presets changed: new names, new effect lists, deleted lights."""

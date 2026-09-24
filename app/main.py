@@ -91,14 +91,15 @@ async def lifespan(app: FastAPI):
         app.state.presets = PresetStore(config.presets_path)
     if not hasattr(app.state, "group_state"):
         app.state.group_state = StateStore(config.state_path)
-    if not hasattr(app.state, "mqtt"):
-        app.state.mqtt = MqttBridge(
-            app.state.strands,
-            app.state.presets,
-            app.state.group_state,
-            app.state.manager,
-            version=app.version,
+    if not hasattr(app.state, "actions"):
+        app.state.actions = GroupActions(
+            app.state.manager, app.state.presets, app.state.group_state
         )
+    if not hasattr(app.state, "mqtt"):
+        app.state.mqtt = MqttBridge(app.state.strands, app.state.actions, version=app.version)
+    # Set here rather than at construction: the bridge needs the actions, and
+    # the actions need to tell the bridge.
+    app.state.actions.on_change = app.state.mqtt.group_changed
     if not app.state.presets.writable:
         log.warning("%s is not writable; presets cannot be saved", config.presets_path)
     log.info(
@@ -110,10 +111,12 @@ async def lifespan(app: FastAPI):
         )
         or "none",
     )
-    # Strands that are simply switched off shouldn't hold up startup.
-    asyncio.create_task(_startup_refresh(app))
+    # Strands that are simply switched off shouldn't hold up startup. The
+    # reference is kept so the task can't be garbage-collected mid-run.
+    startup = asyncio.create_task(_startup_refresh(app))
     app.state.mqtt.start()
     yield
+    startup.cancel()
     await app.state.mqtt.stop()
 
 
@@ -159,12 +162,7 @@ def mqtt(request: Request) -> MqttBridge:
 
 
 def actions(request: Request) -> GroupActions:
-    return GroupActions(
-        manager(request),
-        presets(request),
-        group_state(request),
-        on_change=mqtt(request).group_changed,
-    )
+    return request.app.state.actions
 
 
 @app.exception_handler(PresetError)
