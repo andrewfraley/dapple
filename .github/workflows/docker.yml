@@ -126,6 +126,12 @@ jobs:
           push: ${{ env.PUSH == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Attach a record of how the image was built (commit, workflow, base
+          # images) and an SBOM of every package in it, so anyone can check
+          # what an image came from: `docker buildx imagetools inspect
+          # afraley/dapple:latest --format '{{ json .Provenance }}'`.
+          provenance: mode=max
+          sbom: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
