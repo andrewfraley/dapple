@@ -255,7 +255,8 @@ order problem obvious), `--off`, `--dry-run`. `--help` has the rest.
 
 **`Cannot write /data/…`** — the data directory isn't writable by the container's user. The
 entrypoint only claims root-owned files (what Docker creates for a missing bind-mount source), so
-a folder owned by someone else needs `PUID`/`PGID` in `docker-compose.yml` to match its owner. Dapple keeps running: it falls back to
+a folder owned by someone else needs `PUID`/`PGID` in `docker-compose.yml` to match its owner.
+The entrypoint says so in the log at startup, before any traceback. Dapple keeps running: it falls back to
 the built-in presets, and a failed *state* write never fails an apply (the lights did change —
 failing would make Home Assistant retry a successful operation), while a failed *config* write
 does 500 and rolls back.
