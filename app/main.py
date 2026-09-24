@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import tomllib
 from contextlib import asynccontextmanager
-from importlib.metadata import version
 from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Request
@@ -140,9 +140,12 @@ async def _startup_refresh(app: FastAPI) -> None:
         log.error("Startup refresh failed: %s", exc)
 
 
-# pyproject.toml is the one place the version is written; the image and a dev
-# checkout both install the package, so its metadata is always there.
-app = FastAPI(title="Dapple", version=version("dapple"), lifespan=lifespan)
+# pyproject.toml is the one place the version is written. It sits beside app/
+# in a checkout and in the image alike; reading it directly means a dev venv
+# can't report a stale version from an old install.
+VERSION = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())["project"]["version"]
+
+app = FastAPI(title="Dapple", version=VERSION, lifespan=lifespan)
 
 
 def manager(request: Request) -> DeviceManager:

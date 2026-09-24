@@ -1,7 +1,10 @@
+# Base images are pinned by digest as well as tag: a tag can be re-pointed, a
+# digest can't. Dependabot proposes new digests.
+
 # ---- build the React UI ----------------------------------------------------
 # The output is static files, so build it natively even for an arm64 image
 # rather than running npm under emulation.
-FROM --platform=$BUILDPLATFORM node:22-alpine AS ui
+FROM --platform=$BUILDPLATFORM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS ui
 
 WORKDIR /ui
 COPY frontend/package.json frontend/package-lock.json* ./
@@ -13,14 +16,14 @@ RUN npm run build
 # uv.lock turned into a plain requirements file with hashes, so the runtime
 # image installs exactly what CI tested and doesn't need uv itself. The lock
 # covers every platform, so this only runs once.
-FROM --platform=$BUILDPLATFORM python:3.12-slim AS lock
+FROM --platform=$BUILDPLATFORM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9 AS lock
 
-RUN pip install --no-cache-dir uv==0.12.9
+COPY --from=ghcr.io/astral-sh/uv:0.12.9@sha256:8b940d3a9d65bed080436972241af2e21c84b5e8c9193f7014ed71479ee795ff /uv /bin/uv
 COPY pyproject.toml uv.lock ./
 RUN uv export --frozen --no-emit-project --no-dev -o /requirements.txt
 
 # ---- runtime ---------------------------------------------------------------
-FROM python:3.12-slim
+FROM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -28,12 +31,14 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /srv
 
-# Dependencies before the app, so a code change doesn't reinstall them.
+# Dependencies before the app, so a code change doesn't reinstall them. Every
+# line in requirements.txt carries hashes, and --require-hashes refuses anything
+# that doesn't match. The app itself runs from source rather than being built
+# into a package, because building one would fetch setuptools unpinned.
 COPY --from=lock /requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 COPY pyproject.toml ./
 COPY app/ ./app/
-RUN pip install --no-cache-dir --no-deps .
 
 COPY --from=ui /ui/dist/ ./static/
 
