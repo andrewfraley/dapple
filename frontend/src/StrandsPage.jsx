@@ -252,6 +252,7 @@ export default function StrandsPage({ groups: groupStatuses, onChanged }) {
       <GroupDialog
         open={editingGroup !== null}
         group={editingGroup?.id ? editingGroup : null}
+        takenIds={config.groups.map((group) => group.id)}
         busy={busy}
         error={dialogError}
         onClose={() => {

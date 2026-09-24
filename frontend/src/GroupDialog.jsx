@@ -9,19 +9,30 @@ import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 
-/** The id the server will derive from a name — mirrors config.slugify. */
-function previewId(name) {
-  const slug = (name || '')
+// Mirrors config.RESERVED_GROUP_IDS.
+const RESERVED = new Set(['order', 'all', 'new'])
+
+/**
+ * The id the server will give a new group — mirrors config.slugify and
+ * config.unique_group_id. The dialog calls it permanent, so it has to be the
+ * real one, suffix and all.
+ */
+function previewId(name, takenIds) {
+  let base = (name || '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 32)
     .replace(/^-+|-+$/g, '')
-  return slug || 'group'
+  base = base || 'group'
+  if (RESERVED.has(base)) base = `${base}-group`
+  let candidate = base
+  for (let suffix = 2; takenIds.includes(candidate); suffix += 1) candidate = `${base}-${suffix}`
+  return candidate
 }
 
 /** Create or rename a group. `group` null means create. */
-export default function GroupDialog({ open, group, busy, error, onClose, onSave }) {
+export default function GroupDialog({ open, group, takenIds, busy, error, onClose, onSave }) {
   const [name, setName] = useState('')
 
   useEffect(() => {
@@ -53,8 +64,8 @@ export default function GroupDialog({ open, group, busy, error, onClose, onSave 
               </>
             ) : (
               <>
-                Addressed as <code>{previewId(name)}</code> by the API and Home Assistant. That id
-                is permanent; the name isn’t.
+                Addressed as <code>{previewId(name, takenIds)}</code> by the API and Home Assistant.
+                That id is permanent; the name isn’t.
               </>
             )}
           </Typography>
