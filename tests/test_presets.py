@@ -176,3 +176,11 @@ def test_a_failed_save_or_delete_changes_nothing(tmp_path):
         data.chmod(0o700)
 
     assert set(store.names()) == set(default_presets())
+
+
+def test_built_in_presets_sit_on_the_share_sliders_steps():
+    """The editor's Share slider runs 0–100 in steps of 5. A preset stored as
+    4:1 loads with both sliders at the far left."""
+    for name, pattern in default_presets().items():
+        for slot in pattern.slots:
+            assert 5 <= slot.weight <= 100 and slot.weight % 5 == 0, name

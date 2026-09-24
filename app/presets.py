@@ -20,24 +20,29 @@ BLUE = (0, 0, 255, 0)
 
 
 def default_presets() -> dict[str, Pattern]:
-    """Seeded on first run so the UI is useful before anything is saved."""
+    """Seeded on first run so the UI is useful before anything is saved.
+
+    Weights are on the editor's 0–100 Share slider, which moves in steps of 5.
+    80/20 and 4/1 light the strand identically once reduced, but 4 and 1 would
+    load with both sliders at the far left.
+    """
     return {
-        "Halloween": Pattern(slots=[Slot(rgbw=ORANGE, weight=4), Slot(rgbw=PURPLE, weight=1)]),
+        "Halloween": Pattern(slots=[Slot(rgbw=ORANGE, weight=80), Slot(rgbw=PURPLE, weight=20)]),
         "Christmas": Pattern(
             slots=[
-                Slot(rgbw=RED, weight=2),
-                Slot(rgbw=GREEN, weight=2),
-                Slot(rgbw=WHITE, weight=1),
+                Slot(rgbw=RED, weight=40),
+                Slot(rgbw=GREEN, weight=40),
+                Slot(rgbw=WHITE, weight=20),
             ]
         ),
         "July 4th": Pattern(
             slots=[
-                Slot(rgbw=RED, weight=1),
-                Slot(rgbw=WHITE, weight=1),
-                Slot(rgbw=BLUE, weight=1),
+                Slot(rgbw=RED, weight=30),
+                Slot(rgbw=WHITE, weight=30),
+                Slot(rgbw=BLUE, weight=30),
             ]
         ),
-        "Warm white": Pattern(slots=[Slot(rgbw=WHITE, weight=1)]),
+        "Warm white": Pattern(slots=[Slot(rgbw=WHITE, weight=100)]),
     }
 
 
