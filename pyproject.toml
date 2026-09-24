@@ -34,4 +34,6 @@ target-version = ["py312"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-filterwarnings = ["ignore::DeprecationWarning"]
+# Only Starlette's notice that TestClient wants a different httpx; anything
+# else deprecated should show up.
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient` is deprecated"]
