@@ -113,10 +113,9 @@ This repo is open source; `data/` and `.env` are the only places real details ma
 - Example addresses are `192.168.40.21`, `.22`, `.30` in docs and UI placeholders (matching
   `data.example/config.yaml`), `192.168.1.x` for the machine running Dapple (README,
   HOME_ASSISTANT.md), and `10.0.0.x` in tests. Don't invent new ranges.
-- Screenshots in `docs/` come from the live app, so they show whatever is in `data/`. Before
-  saving one, point the app at a config that uses the example addresses, or paint over the
-  address cells afterwards. Then look at the image, and run `magick mogrify -strip` on it to
-  drop embedded metadata.
+- Screenshots in `docs/` come from a throwaway instance, never the live app or container:
+  `scripts/screenshot.sh [page] [out.png] [width] [height]` starts one on a temp data dir with
+  the example config, captures the page and strips metadata. Look at the image before committing.
 - Pasted logs and `smoke.py` output carry real hosts too; swap in the example addresses.
 - No names, emails, home paths (`/home/...`) or personal details in code, docs, comments or
   package metadata.
