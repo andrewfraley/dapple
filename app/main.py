@@ -19,6 +19,7 @@ from app.config import (
     ConfigStorageError,
     ConfigStore,
     UnknownGroupError,
+    UnknownStrandError,
     load_config,
     normalize_device,
     normalize_mqtt,
@@ -176,7 +177,8 @@ async def preset_storage_error_handler(_request: Request, exc: PresetStorageErro
 
 
 @app.exception_handler(UnknownGroupError)
-async def unknown_group_handler(_request: Request, exc: UnknownGroupError) -> JSONResponse:
+@app.exception_handler(UnknownStrandError)
+async def unknown_target_handler(_request: Request, exc: ConfigError) -> JSONResponse:
     return JSONResponse(status_code=404, content={"detail": str(exc)})
 
 
@@ -236,15 +238,7 @@ def _group_status(request: Request, group) -> GroupStatus:
     return GroupStatus(
         id=group.id,
         name=group.name,
-        strands=[
-            StrandConfig(
-                name=device.config.name,
-                host=device.config.host,
-                number_of_led=device.config.number_of_led,
-                led_profile=device.config.led_profile,
-            )
-            for device in group.devices
-        ],
+        strands=[_as_model(device.config) for device in group.devices],
         total_leds=group.total_leds(),
         segments=group.segments(),
         reachable=group.reachable(),

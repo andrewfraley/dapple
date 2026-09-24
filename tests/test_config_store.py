@@ -338,19 +338,24 @@ def test_what_is_written_is_what_loads_back(tmp_path):
     assert reloaded.groups == store.groups
 
 
-def test_other_settings_survive_a_write(tmp_path):
-    config = AppConfig(
-        data_dir=tmp_path,
-        config_path=tmp_path / "config.yaml",
-        movie_frames=2,
-        timeout=12.0,
-        gamma=2.8,
-    )
-    ConfigStore(config).create_group("Tree")
+def test_settings_written_in_the_file_survive_a_write(tmp_path):
+    (tmp_path / "config.yaml").write_text("movie_frames: 2\ntimeout: 12.0\ngamma: 2.8\n")
+    ConfigStore(load_config(tmp_path, env={})).create_group("Tree")
 
     reloaded = load_config(tmp_path, env={})
 
     assert (reloaded.movie_frames, reloaded.timeout, reloaded.gamma) == (2, 12.0, 2.8)
+
+
+def test_env_settings_are_not_frozen_into_the_file_by_an_edit(tmp_path):
+    """The file outranks the env. Writing env values into it on the first edit
+    would make DAPPLE_GAMMA and friends stop working from then on."""
+    env = {"DAPPLE_MOVIE_FRAMES": "2", "DAPPLE_TIMEOUT": "12", "DAPPLE_GAMMA": "2.8"}
+    ConfigStore(load_config(tmp_path, env=env)).create_group("Tree")
+
+    written = (tmp_path / "config.yaml").read_text()
+    assert "gamma" not in written and "timeout" not in written and "movie_frames" not in written
+    assert load_config(tmp_path, env={"DAPPLE_GAMMA": "1.0"}).gamma == 1.0
 
 
 def test_saving_marks_the_file_as_the_config_source(tmp_path):

@@ -160,3 +160,19 @@ def test_saving_to_a_read_only_data_dir_says_why(tmp_path):
 
     with pytest.raises(PresetStorageError, match="Cannot write"):
         store.save("Test", a_pattern())
+
+
+def test_a_failed_save_or_delete_changes_nothing(tmp_path):
+    """The route 500s, so the UI and HA's effect list mustn't show the change."""
+    data = tmp_path / "data"
+    store = PresetStore(data / "presets.json")
+    data.chmod(0o500)
+    try:
+        with pytest.raises(PresetStorageError):
+            store.save("Test", a_pattern())
+        with pytest.raises(PresetStorageError):
+            store.delete("Halloween")
+    finally:
+        data.chmod(0o700)
+
+    assert set(store.names()) == set(default_presets())

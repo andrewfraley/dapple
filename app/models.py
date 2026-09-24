@@ -14,6 +14,10 @@ Layout = Literal["interleaved", "blocked"]
 LedProfile = Literal["RGB", "RGBW"]
 
 MAX_SLOTS = 16
+#: Longest strand, group or preset name.
+MAX_NAME = 64
+#: Most LEDs on one strand — far past any Twinkly, but it bounds a frame's size.
+MAX_LEDS = 20000
 
 
 class Slot(BaseModel):
@@ -75,7 +79,7 @@ class PreviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     pattern: Pattern
-    num_leds: Annotated[int, Field(ge=0, le=20000)]
+    num_leds: Annotated[int, Field(ge=0, le=MAX_LEDS)]
     offset: Annotated[int, Field(ge=0)] = 0
 
 
@@ -98,9 +102,9 @@ class StrandConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    name: Annotated[str, Field(max_length=64)] = ""
+    name: Annotated[str, Field(max_length=MAX_NAME)] = ""
     host: Annotated[str, Field(min_length=1, max_length=255)]
-    number_of_led: Annotated[int, Field(ge=1, le=20000)] | None = None
+    number_of_led: Annotated[int, Field(ge=1, le=MAX_LEDS)] | None = None
     led_profile: LedProfile | None = None
 
 
@@ -189,7 +193,7 @@ class GroupStatus(BaseModel):
 class GroupCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    name: Annotated[str, Field(min_length=1, max_length=64)]
+    name: Annotated[str, Field(min_length=1, max_length=MAX_NAME)]
 
 
 class GroupRename(GroupCreate):
@@ -215,7 +219,7 @@ class ApplyPresetRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     #: Preset names contain spaces, so they travel in the body, not the path.
-    name: Annotated[str, Field(min_length=1, max_length=64)]
+    name: Annotated[str, Field(min_length=1, max_length=MAX_NAME)]
 
 
 class ConfigResponse(BaseModel):

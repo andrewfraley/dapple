@@ -723,6 +723,24 @@ def test_a_partial_reorder_within_a_group_is_refused(client):
     assert "exactly once" in response.json()["detail"]
 
 
+@pytest.mark.parametrize(
+    "method, path, body",
+    [
+        ("put", "/api/config/strands/10.0.0.9", {"host": "10.0.0.9"}),
+        ("put", "/api/config/strands/10.0.0.9/group", {"group": "tree"}),
+        ("delete", "/api/config/strands/10.0.0.9", None),
+    ],
+)
+def test_an_unknown_strand_is_a_404_like_an_unknown_group(client, method, path, body):
+    client.post("/api/config/groups", json={"name": "Tree"})
+    kwargs = {"json": body} if body is not None else {}
+
+    response = getattr(client, method)(path, **kwargs)
+
+    assert response.status_code == 404
+    assert "No strand configured" in response.json()["detail"]
+
+
 def test_delete_a_strand(client):
     add(client, "10.0.0.1")
     add(client, "10.0.0.2")

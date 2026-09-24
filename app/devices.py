@@ -25,8 +25,8 @@ from xled.exceptions import (
     TokenExpiredError,
 )
 
-from app.config import AppConfig, DeviceConfig, UnknownGroupError
-from app.models import DeviceInfo, DeviceResult, Pattern, StrandSegment
+from app.config import AppConfig, DeviceConfig, UnknownGroupError, UnknownStrandError
+from app.models import DeviceInfo, DeviceResult, LedProfile, Pattern, StrandSegment
 from app.pattern import DEFAULT_GAMMA, build_frame
 
 log = logging.getLogger(__name__)
@@ -39,6 +39,11 @@ MOVIE_NAME = "dapple"
 #: A static pattern never advances, so the frame delay only matters for firmware
 #: that insists on more than one frame.
 FRAME_DELAY_MS = 1000
+
+
+def _known_profile(profile: str | None) -> LedProfile | None:
+    """The profile if it's one we can pack for, else None."""
+    return profile if profile in ("RGB", "RGBW") else None
 
 
 def _get(response: Any, key: str, default: Any = None) -> Any:
@@ -191,7 +196,6 @@ class Device:
 
     @_one_at_a_time
     def info(self, with_live_state: bool = False) -> DeviceInfo:
-        profile = self.led_profile if self.led_profile in ("RGB", "RGBW") else None
         mode = brightness = None
         if with_live_state and self.reachable:
             try:
@@ -204,7 +208,7 @@ class Device:
             host=self.host,
             reachable=self.reachable,
             number_of_led=self.number_of_led,
-            led_profile=profile,
+            led_profile=_known_profile(self.led_profile),
             fw_version=self.fw_version,
             fw_family=self.fw_family,
             mode=mode,
@@ -324,7 +328,7 @@ class DeviceGroup:
                 host=device.host,
                 offset=offset,
                 number_of_led=device.number_of_led or 0,
-                led_profile=device.led_profile if device.led_profile in ("RGB", "RGBW") else "RGB",
+                led_profile=_known_profile(device.led_profile) or "RGB",
             )
             for device, offset in zip(self.devices, self.offsets())
             if device.number_of_led
@@ -395,7 +399,7 @@ class DeviceManager:
         for device in self.devices:
             if device.host == host:
                 return device
-        raise DeviceError(f"No strand configured at {host!r}")
+        raise UnknownStrandError(f"No strand configured at {host!r}")
 
     async def refresh_one(self, host: str) -> DeviceInfo:
         device = self.get(host)

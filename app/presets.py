@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import tempfile
 from pathlib import Path
 
-from app.models import Pattern, Slot
+from app.models import MAX_NAME, Pattern, Slot
+from app.storage import atomic_write
 
 log = logging.getLogger(__name__)
 
@@ -54,8 +53,8 @@ def validate_name(name: str) -> str:
     name = name.strip()
     if not name:
         raise PresetError("preset name must not be empty")
-    if len(name) > 64:
-        raise PresetError("preset name must be 64 characters or fewer")
+    if len(name) > MAX_NAME:
+        raise PresetError(f"preset name must be {MAX_NAME} characters or fewer")
     if "/" in name or "\\" in name:
         raise PresetError("preset name must not contain slashes")
     return name
@@ -65,7 +64,9 @@ class PresetStore:
     """In-memory presets, written through to JSON on every change.
 
     Writes go to a temp file in the same directory and are renamed into place,
-    so a crash mid-write cannot leave a truncated presets.json behind.
+    so a crash mid-write cannot leave a truncated presets.json behind. A change
+    only replaces the in-memory set once it is on disk, so a failed save isn't
+    left showing in the UI and in Home Assistant's effect list.
     """
 
     def __init__(self, path: Path | str, seed_defaults: bool = True):
@@ -77,7 +78,7 @@ class PresetStore:
         elif seed_defaults:
             self._presets = default_presets()
             try:
-                self._write()
+                self._write(self._presets)
             except PresetStorageError as exc:
                 # A read-only /data shouldn't stop the app: applying patterns
                 # and the built-in presets still work, saving doesn't.
@@ -97,9 +98,10 @@ class PresetStore:
                 log.error("Skipping preset %r: %s", name, exc)
         return presets
 
-    def _write(self) -> None:
+    def _write(self, presets: dict[str, Pattern]) -> None:
+        payload = {name: pattern.model_dump() for name, pattern in sorted(presets.items())}
         try:
-            self._write_atomically()
+            atomic_write(self.path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
         except OSError as exc:
             self.writable = False
             raise PresetStorageError(
@@ -108,23 +110,6 @@ class PresetStore:
                 "— see 'Permissions on ./data' in the README."
             ) from exc
         self.writable = True
-
-    def _write_atomically(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {name: pattern.model_dump() for name, pattern in sorted(self._presets.items())}
-        handle, temp_path = tempfile.mkstemp(
-            dir=str(self.path.parent), prefix=".presets-", suffix=".json"
-        )
-        try:
-            with os.fdopen(handle, "w") as file:
-                json.dump(payload, file, indent=2, sort_keys=True)
-                file.write("\n")
-                file.flush()
-                os.fsync(file.fileno())
-            os.replace(temp_path, self.path)
-        except BaseException:
-            Path(temp_path).unlink(missing_ok=True)
-            raise
 
     def all(self) -> dict[str, Pattern]:
         return dict(self._presets)
@@ -140,12 +125,14 @@ class PresetStore:
 
     def save(self, name: str, pattern: Pattern) -> Pattern:
         name = validate_name(name)
-        self._presets[name] = pattern
-        self._write()
+        presets = {**self._presets, name: pattern}
+        self._write(presets)
+        self._presets = presets
         return pattern
 
     def delete(self, name: str) -> None:
         if name not in self._presets:
             raise PresetError(f"no such preset: {name!r}")
-        del self._presets[name]
-        self._write()
+        presets = {key: value for key, value in self._presets.items() if key != name}
+        self._write(presets)
+        self._presets = presets

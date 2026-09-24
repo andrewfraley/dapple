@@ -11,14 +11,15 @@ from __future__ import annotations
 import logging
 import os
 import re
-import tempfile
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Mapping
 
 import yaml
 
+from app.models import MAX_LEDS, MAX_NAME
 from app.pattern import DEFAULT_GAMMA
+from app.storage import atomic_write
 
 log = logging.getLogger(__name__)
 
@@ -44,9 +45,6 @@ RESERVED_GROUP_IDS = frozenset({"order", "all", "new"})
 TOPIC_PREFIX_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 DISCOVERY_PREFIX_PATTERN = re.compile(r"^[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*$")
 
-MAX_LEDS = 20000
-MAX_NAME = 64
-
 #: What the migration calls the group it wraps a pre-groups config into.
 MIGRATED_GROUP_ID = "all-strands"
 MIGRATED_GROUP_NAME = "All strands"
@@ -60,11 +58,15 @@ class UnknownGroupError(ConfigError):
     """No group by that id — a 404 rather than a 400."""
 
 
+class UnknownStrandError(ConfigError):
+    """No strand at that host — a 404, like an unknown group."""
+
+
 class ConfigStorageError(Exception):
     """config.yaml could not be written — almost always /data permissions."""
 
 
-@dataclass
+@dataclass(frozen=True)
 class DeviceConfig:
     """One strand.
 
@@ -79,12 +81,16 @@ class DeviceConfig:
     led_profile: str | None = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class GroupConfig:
     """One group and the strands in it, in physical order.
 
     ``id`` is what the API and Home Assistant address, and never changes —
     renaming a group is safe.
+
+    Frozen, like :class:`DeviceConfig`: :class:`ConfigStore` rolls back a failed
+    write by putting the old objects back, which only works if nothing changed
+    them. The ``devices`` list itself is still mutable; build a new one.
     """
 
     id: str
@@ -125,6 +131,10 @@ class AppConfig:
     gamma: float = DEFAULT_GAMMA
     #: None until someone fills in the Home Assistant tab.
     mqtt: MqttConfig | None = None
+    #: Which of movie_frames, timeout and gamma config.yaml sets. Only those are
+    #: written back, so the first edit in the UI doesn't freeze the env var
+    #: values into the file, where they'd outrank the env from then on.
+    from_file: frozenset[str] = frozenset()
     source: str = "none"
     config_path: Path | None = None
 
@@ -287,6 +297,10 @@ def _mqtt_from_yaml(document: object) -> MqttConfig | None:
         return None
 
 
+#: Settings that come from config.yaml or the env, with the file winning.
+TUNABLES = {"movie_frames": int, "timeout": float, "gamma": float}
+
+
 def load_config(
     data_dir: Path | str | None = None,
     env: Mapping[str, str] | None = None,
@@ -313,12 +327,11 @@ def load_config(
     if config_path.is_file():
         document = yaml.safe_load(config_path.read_text()) or {}
         groups = _groups_from_yaml(document)
-        if isinstance(document, dict) and document.get("movie_frames"):
-            config.movie_frames = int(document["movie_frames"])
-        if isinstance(document, dict) and document.get("timeout"):
-            config.timeout = float(document["timeout"])
-        if isinstance(document, dict) and document.get("gamma") is not None:
-            config.gamma = float(document["gamma"])
+        # The file wins over the env, so a value written by hand sticks.
+        for key, cast in TUNABLES.items():
+            if isinstance(document, dict) and document.get(key) is not None:
+                setattr(config, key, cast(document[key]))
+                config.from_file |= {key}
         config.mqtt = _mqtt_from_yaml(document)
         if groups:
             config.groups = groups
@@ -335,6 +348,19 @@ def load_config(
 # ---- editing ---------------------------------------------------------------
 
 
+def normalize_host(host: str | None, missing: str) -> str:
+    """A bare hostname or IP, or a ConfigError saying ``missing`` if it's blank."""
+    host = (host or "").strip().rstrip("/")
+    if not host:
+        raise ConfigError(missing)
+    # A pasted URL is the obvious mistake; say so rather than failing the regex.
+    if "://" in host:
+        raise ConfigError(f"Enter just the hostname or IP, not a URL: {host!r}")
+    if not HOST_PATTERN.match(host):
+        raise ConfigError(f"{host!r} is not a valid hostname or IP address")
+    return host
+
+
 def normalize_device(
     name: str | None,
     host: str,
@@ -343,14 +369,7 @@ def normalize_device(
     fallback_name: str = "Strand",
 ) -> DeviceConfig:
     """Validate one strand entry as it comes in from the Strands page."""
-    host = (host or "").strip().rstrip("/")
-    if not host:
-        raise ConfigError("A hostname or IP address is required")
-    # A pasted URL is the obvious mistake; say so rather than failing the regex.
-    if "://" in host:
-        raise ConfigError(f"Enter just the hostname or IP, not a URL: {host!r}")
-    if not HOST_PATTERN.match(host):
-        raise ConfigError(f"{host!r} is not a valid hostname or IP address")
+    host = normalize_host(host, "A hostname or IP address is required")
 
     if number_of_led is not None and not 1 <= number_of_led <= MAX_LEDS:
         raise ConfigError(f"LED count must be between 1 and {MAX_LEDS}")
@@ -378,16 +397,11 @@ def normalize_mqtt(
     topic_prefix: str = "dapple",
 ) -> MqttConfig:
     """Validate broker settings as they come in from the Home Assistant tab."""
-    host = (host or "").strip().rstrip("/")
-    if not host:
-        raise ConfigError(
-            "Enter your MQTT broker's address. With the Mosquitto add-on, "
-            "that's your Home Assistant's address."
-        )
-    if "://" in host:
-        raise ConfigError(f"Enter just the hostname or IP, not a URL: {host!r}")
-    if not HOST_PATTERN.match(host):
-        raise ConfigError(f"{host!r} is not a valid hostname or IP address")
+    host = normalize_host(
+        host,
+        "Enter your MQTT broker's address. With the Mosquitto add-on, "
+        "that's your Home Assistant's address.",
+    )
     port = int(port)
     if not 1 <= port <= 65535:
         raise ConfigError("The port must be between 1 and 65535 (Mosquitto uses 1883)")
@@ -499,14 +513,14 @@ class ConfigStore:
         for group in self.config.groups:
             if any(device.host == host for device in group.devices):
                 return group
-        raise ConfigError(f"No strand configured at {host!r}")
+        raise UnknownStrandError(f"No strand configured at {host!r}")
 
     def find(self, host: str) -> DeviceConfig:
         for group in self.config.groups:
             for device in group.devices:
                 if device.host == host:
                     return device
-        raise ConfigError(f"No strand configured at {host!r}")
+        raise UnknownStrandError(f"No strand configured at {host!r}")
 
     def _check_free(self, host: str, ignoring: str | None = None) -> None:
         for device in self.devices:
@@ -693,18 +707,16 @@ class ConfigStore:
             raise
 
     def save(self) -> None:
-        document = {
-            "groups": [_group_to_yaml(group) for group in self.config.groups],
-            "movie_frames": self.config.movie_frames,
-            "timeout": self.config.timeout,
-            "gamma": self.config.gamma,
-        }
+        document = {"groups": [_group_to_yaml(group) for group in self.config.groups]}
+        for key in TUNABLES:
+            if key in self.config.from_file:
+                document[key] = getattr(self.config, key)
         if self.config.mqtt is not None:
             document["mqtt"] = _mqtt_to_yaml(self.config.mqtt)
 
         body = HEADER + yaml.safe_dump(document, sort_keys=False, default_flow_style=False)
         try:
-            self._write_atomically(body)
+            atomic_write(self.path, body)
         except OSError as exc:
             self.writable = False
             raise ConfigStorageError(
@@ -714,18 +726,3 @@ class ConfigStore:
             ) from exc
         self.writable = True
         self.config.source = str(self.path)
-
-    def _write_atomically(self, body: str) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        handle, temp_path = tempfile.mkstemp(
-            dir=str(self.path.parent), prefix=".config-", suffix=".yaml"
-        )
-        try:
-            with os.fdopen(handle, "w") as file:
-                file.write(body)
-                file.flush()
-                os.fsync(file.fileno())
-            os.replace(temp_path, self.path)
-        except BaseException:
-            Path(temp_path).unlink(missing_ok=True)
-            raise
