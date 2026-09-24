@@ -7,7 +7,14 @@ async function request(path, options = {}) {
     ...options,
   })
   const text = await response.text()
-  const body = text ? JSON.parse(text) : null
+  let body = null
+  try {
+    body = text ? JSON.parse(text) : null
+  } catch {
+    // A reverse proxy's HTML error page, say. Say which status it was rather
+    // than surfacing a JSON syntax error.
+    if (response.ok) throw new Error(`Unexpected response from ${path}`)
+  }
   if (!response.ok) {
     const detail = body?.detail
     if (!detail) throw new Error(`HTTP ${response.status}`)
