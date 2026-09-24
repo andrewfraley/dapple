@@ -17,6 +17,7 @@ PURPLE = (128, 0, 255, 0)
 RED = (255, 0, 0, 0)
 GREEN = (0, 200, 0, 0)
 WHITE = (0, 0, 0, 255)
+BLUE = (0, 0, 255, 0)
 
 
 def default_presets() -> dict[str, Pattern]:
@@ -30,6 +31,13 @@ def default_presets() -> dict[str, Pattern]:
                 Slot(rgbw=RED, weight=2),
                 Slot(rgbw=GREEN, weight=2),
                 Slot(rgbw=WHITE, weight=1),
+            ]
+        ),
+        "July 4th": Pattern(
+            slots=[
+                Slot(rgbw=RED, weight=1),
+                Slot(rgbw=WHITE, weight=1),
+                Slot(rgbw=BLUE, weight=1),
             ]
         ),
         "Warm white": Pattern(slots=[Slot(rgbw=WHITE, weight=1)]),

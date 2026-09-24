@@ -343,6 +343,7 @@ def test_presets_are_seeded(client):
     assert set(client.get("/api/presets").json()) == {
         "Halloween",
         "Christmas",
+        "July 4th",
         "Warm white",
     }
 

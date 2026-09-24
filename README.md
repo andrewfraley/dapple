@@ -133,7 +133,7 @@ When it looks right, click **Apply**. Nothing reaches the lights until you do.
 any group, so you can save "Halloween" once and apply it to the tree one night and the porch the
 next.
 
-Dapple starts with three: **Halloween**, **Christmas** and **Warm white**.
+Dapple starts with four: **Halloween**, **Christmas**, **July 4th** and **Warm white**.
 
 To bring one back, pick it from the **Preset** dropdown and click:
 
