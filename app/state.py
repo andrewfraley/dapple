@@ -58,10 +58,6 @@ def live_state(
     )
 
 
-class StateStorageError(Exception):
-    """state.json could not be written — almost always /data permissions."""
-
-
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -89,9 +85,6 @@ class StateStore:
             except Exception as exc:  # a hand-edited file shouldn't take the app down
                 log.error("Skipping state for group %r: %s", group_id, exc)
         return state
-
-    def all(self) -> dict[str, GroupState]:
-        return dict(self._state)
 
     def get(self, group_id: str) -> GroupState | None:
         """None when a group has never been applied to — not an error."""
