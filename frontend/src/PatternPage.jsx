@@ -390,6 +390,9 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
                 }
                 control={
                   <Switch
+                    // Remounted by the first reading, so it appears in place
+                    // rather than sliding across as the page opens.
+                    key={live ? 'read' : 'unread'}
                     checked={live?.power === 'on'}
                     disabled={busy || !live || live.power === null}
                     onChange={(event) => setPower(event.target.checked)}

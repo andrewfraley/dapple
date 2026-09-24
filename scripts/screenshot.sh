@@ -9,6 +9,7 @@
 # the image shows the example addresses and built-in presets, whatever is in
 # data/. LED counts are pinned so the preview renders with no strands present,
 # and the short timeout lets the unanswered strand lookups give up quickly.
+# scripts/screenshot_app.py makes the strands read as on, showing Halloween.
 #
 # Needs a built UI (npm --prefix frontend run build), chromium and ImageMagick.
 set -euo pipefail
@@ -53,8 +54,9 @@ groups:
         led_profile: RGBW
 EOF
 
-DAPPLE_DATA_DIR=$data .venv/bin/python -m uvicorn app.main:app --port "$port" \
-  >"$data/server.log" 2>&1 &
+# screenshot_app.py answers for the missing strands, so the page shows them on.
+DAPPLE_DATA_DIR=$data .venv/bin/python -m uvicorn --app-dir scripts screenshot_app:app \
+  --port "$port" >"$data/server.log" 2>&1 &
 server=$!
 for _ in $(seq 50); do
   curl -sf "http://127.0.0.1:$port/api/health" >/dev/null && break

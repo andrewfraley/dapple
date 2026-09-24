@@ -17,6 +17,9 @@ over MQTT and sets up the lights itself. It's off until you set it up.
 2. **Make a login for Dapple.** The Mosquitto add-on accepts any Home Assistant user. Create one
    just for Dapple under Settings → People → Users.
 3. **Fill in Dapple's Home Assistant tab.**
+
+   ![Dapple's Home Assistant tab: broker address, port, username and password, with the connect switch off](docs/home-assistant.png)
+
    - The broker address is your Home Assistant's address, e.g. `192.168.1.20`.
    - The port is `1883`.
    - The username and password are the ones from step 2.
