@@ -362,11 +362,13 @@ starts at its own LED 0. That's a bug.
 
 | Push | Tags |
 |---|---|
-| `main` | `latest`, `sha-<commit>`, and `1.2.3` + `1.2` when it's a release (below) |
+| `main`, releasing a new version (below) | `latest`, `1.2.3`, `1.2`, `main`, `sha-<commit>` |
+| `main`, no new version (e.g. a Dependabot bump) | `main`, `sha-<commit>` |
 | any other branch, e.g. `mqtt-discovery` | `mqtt-discovery`, `sha-<commit>` |
-| tag `v1.2.3` | `1.2.3`, `1.2`, `sha-<commit>` |
+| tag `v1.2.3` pushed by hand | `1.2.3`, `1.2`, `sha-<commit>` |
 
-A branch build never touches `latest` or a version tag, so it's safe to push work in progress.
+`latest` is always the newest release. Nothing else moves it, so work in progress on a branch, or
+a merge that doesn't release, never reaches anyone who runs `latest`.
 Slashes in a branch name become dashes (`feature/x` → `feature-x`).
 
 **Changes reach `main` only through pull requests, and a person merges them.** Push a branch, open
@@ -382,8 +384,13 @@ a PR, and wait for CI and a review.
 
 When the PR is merged, the `main` build sees a version with no `v<version>` tag. It pushes the
 image as `latest`, `<version>` and `<major>.<minor>`, then tags the merge commit and creates the
-GitHub release `Dapple <version>` from the notes file. A PR that doesn't bump the version just
-moves `latest`.
+GitHub release `Dapple <version>` from the notes file. A PR that doesn't bump the version
+publishes only `main` and `sha-<commit>`; its changes reach users with the next release.
+
+**Dependabot PRs** can't bump the version, so they merge without releasing. Read the lock diff
+before merging one. Their changes ship in the next release PR, whose notes mention anything a
+user would notice. When Dependabot flags a *security* update, open a release soon after merging
+it rather than waiting for other changes.
 
 **Testing a branch build.** On the machine that runs Dapple, point `docker-compose.yml` at the
 branch tag and pull it:
