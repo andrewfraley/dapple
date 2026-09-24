@@ -20,6 +20,17 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import EditIcon from '@mui/icons-material/Edit'
 
+// Read by screen readers, invisible on screen: the actions column has no
+// visible heading, but a table header cell still needs a name.
+const visuallyHidden = {
+  position: 'absolute',
+  width: '1px',
+  height: '1px',
+  overflow: 'hidden',
+  clip: 'rect(0 0 0 0)',
+  whiteSpace: 'nowrap',
+}
+
 /** The LED count in play. "pinned" means config.yaml overrides the strand. */
 function LedCell({ strand, info }) {
   if (strand.number_of_led) {
@@ -51,7 +62,7 @@ function StatusCell({ info }) {
     return <Chip label={`ok · fw ${info.fw_version || '?'}`} size="small" color="success" />
   }
   return (
-    <Tooltip title={info.error || 'No answer'}>
+    <Tooltip describeChild title={info.error || 'No answer'}>
       <Chip label="no answer" size="small" color="error" />
     </Tooltip>
   )
@@ -89,7 +100,9 @@ export default function GroupSection({
       <CardContent>
         <Stack direction="row" alignItems="flex-start" spacing={1} sx={{ mb: 1 }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="subtitle1">{group.name}</Typography>
+            <Typography variant="subtitle1" component="h2">
+              {group.name}
+            </Typography>
             <Typography variant="caption" color="text.secondary">
               {strands.length
                 ? `${strands.length} strand${strands.length === 1 ? '' : 's'} · ${totalLeds} LEDs · one pattern, starting at this group's first LED`
@@ -97,28 +110,44 @@ export default function GroupSection({
             </Typography>
           </Box>
           <Stack direction="row" spacing={0.5}>
-            <Tooltip title="Move group up">
+            <Tooltip describeChild title="Move group up">
               <span>
-                <IconButton size="small" disabled={busy || !canMoveUp} onClick={() => onMoveGroup(-1)}>
+                <IconButton
+                  size="small"
+                  disabled={busy || !canMoveUp}
+                  onClick={() => onMoveGroup(-1)}
+                  aria-label={`Move ${group.name} up`}
+                >
                   <ArrowUpwardIcon fontSize="small" />
                 </IconButton>
               </span>
             </Tooltip>
-            <Tooltip title="Move group down">
+            <Tooltip describeChild title="Move group down">
               <span>
-                <IconButton size="small" disabled={busy || !canMoveDown} onClick={() => onMoveGroup(1)}>
+                <IconButton
+                  size="small"
+                  disabled={busy || !canMoveDown}
+                  onClick={() => onMoveGroup(1)}
+                  aria-label={`Move ${group.name} down`}
+                >
                   <ArrowDownwardIcon fontSize="small" />
                 </IconButton>
               </span>
             </Tooltip>
-            <Tooltip title="Rename group">
+            <Tooltip describeChild title="Rename group">
               <span>
-                <IconButton size="small" disabled={busy} onClick={onRename}>
+                <IconButton
+                  size="small"
+                  disabled={busy}
+                  onClick={onRename}
+                  aria-label={`Rename ${group.name}`}
+                >
                   <EditIcon fontSize="small" />
                 </IconButton>
               </span>
             </Tooltip>
             <Tooltip
+              describeChild
               title={
                 strands.length
                   ? `Move or remove its ${strands.length} strand${strands.length === 1 ? '' : 's'} first`
@@ -126,7 +155,12 @@ export default function GroupSection({
               }
             >
               <span>
-                <IconButton size="small" disabled={busy || strands.length > 0} onClick={onDelete}>
+                <IconButton
+                  size="small"
+                  disabled={busy || strands.length > 0}
+                  onClick={onDelete}
+                  aria-label={`Delete ${group.name}`}
+                >
                   <DeleteOutlineIcon fontSize="small" />
                 </IconButton>
               </span>
@@ -136,7 +170,9 @@ export default function GroupSection({
 
         {strands.length > 0 && (
           <Box sx={{ overflowX: 'auto' }}>
-            <Table size="small">
+            {/* Eight columns share a card: MUI's 16px side padding would push the
+                last one out of view before the table ever needed to scroll. */}
+            <Table size="small" sx={{ '& .MuiTableCell-root': { px: 1.25 } }}>
               <TableHead>
                 <TableRow>
                   <TableCell>Name</TableCell>
@@ -146,7 +182,11 @@ export default function GroupSection({
                   <TableCell>Status</TableCell>
                   {others.length > 0 && <TableCell>Group</TableCell>}
                   <TableCell align="right">Order</TableCell>
-                  <TableCell align="right" />
+                  <TableCell align="right">
+                    <Box component="span" sx={visuallyHidden}>
+                      Actions
+                    </Box>
+                  </TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -174,8 +214,14 @@ export default function GroupSection({
                           value={group.id}
                           disabled={busy}
                           onChange={(event) => onMoveStrand(strand.host, event.target.value)}
-                          sx={{ minWidth: 120 }}
-                          aria-label={`Group of ${strand.name}`}
+                          // Form-field sizing would make this the widest cell and
+                          // push the table past the card; match the table's text.
+                          sx={{
+                            minWidth: 120,
+                            fontSize: 'body2.fontSize',
+                            '& .MuiSelect-select': { py: 0.5 },
+                          }}
+                          inputProps={{ 'aria-label': `Group of ${strand.name}` }}
                         >
                           <MenuItem value={group.id}>{group.name}</MenuItem>
                           {others.map((candidate) => (
@@ -186,7 +232,7 @@ export default function GroupSection({
                         </Select>
                       </TableCell>
                     )}
-                    <TableCell align="right">
+                    <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                       <IconButton
                         size="small"
                         disabled={busy || index === 0}
@@ -204,7 +250,7 @@ export default function GroupSection({
                         <ArrowDownwardIcon fontSize="small" />
                       </IconButton>
                     </TableCell>
-                    <TableCell align="right">
+                    <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                       <IconButton
                         size="small"
                         disabled={busy}

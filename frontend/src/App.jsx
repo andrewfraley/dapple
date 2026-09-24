@@ -80,7 +80,9 @@ export default function App() {
         <Toolbar variant="dense" sx={{ gap: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Box component="img" src="/favicon.svg" alt="" sx={{ width: 28, height: 28 }} />
-            <Typography variant="h6">Dapple</Typography>
+            <Typography variant="h6" component="h1">
+              Dapple
+            </Typography>
           </Box>
           <Tabs
             value={route.tab}
@@ -96,7 +98,7 @@ export default function App() {
         </Toolbar>
       </AppBar>
 
-      <Container maxWidth="md" sx={{ pt: 2 }}>
+      <Container component="main" maxWidth="md" sx={{ pt: 2 }}>
         {route.tab === 'strands' ? (
           <StrandsPage groups={groups} onChanged={reload} />
         ) : (

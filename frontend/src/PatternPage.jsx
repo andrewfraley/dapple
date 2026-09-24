@@ -269,7 +269,7 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
 
         <Card variant="outlined">
           <CardContent>
-            <Typography variant="subtitle2" gutterBottom>
+            <Typography variant="subtitle2" component="h2" gutterBottom>
               {group?.name}
             </Typography>
             <PreviewStrip
@@ -292,7 +292,7 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
 
         <Card variant="outlined">
           <CardContent>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            <Typography variant="subtitle2" component="h2" color="text.secondary" gutterBottom>
               Colors
             </Typography>
             {pattern.slots.map((slot, index) => (

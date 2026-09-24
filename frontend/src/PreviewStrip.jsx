@@ -1,18 +1,20 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 
 import { cssColor, ledColors } from './pattern.js'
 
-// The panel is always dark, whatever the theme: lit bulbs only read as lights
-// against the dark, and it matches the logo.
+// The logo's navy, so the lights sit on their own panel rather than the bare
+// page.
 const PANEL = '#1c1a2b'
-const UNLIT = '#34304a'
-const LABEL = '#9e99b8'
+// An off LED is drawn as a ring at 3:1 against the panel (WCAG's floor for
+// graphics): a pattern that uses black as spacing needs those gaps visible.
+const UNLIT = '#6a6585'
+const LABEL = '#d4d0e8'
 
 const TARGET_PITCH = 12
 const PADDING = 12
-const LABEL_HEIGHT = 18
+const LABEL_HEIGHT = 22
 const STRAND_GAP = 10
 
 /**
@@ -26,6 +28,7 @@ const STRAND_GAP = 10
  */
 export default function PreviewStrip({ pattern, totalLeds, segments, known }) {
   const canvasRef = useRef(null)
+  const captionId = useId()
   const [width, setWidth] = useState(0)
 
   // The row length depends on the width, so a resize has to redraw, not just
@@ -63,7 +66,7 @@ export default function PreviewStrip({ pattern, totalLeds, segments, known }) {
 
     const leds = ledColors(pattern, totalLeds)
     const radius = pitch * 0.34
-    context.font = '11px system-ui, sans-serif'
+    context.font = '500 13px system-ui, sans-serif'
     context.textBaseline = 'middle'
 
     let top = PADDING
@@ -79,13 +82,21 @@ export default function PreviewStrip({ pattern, totalLeds, segments, known }) {
         const lit = color && color.some((channel) => channel > 0)
         const x = PADDING + (led % columns + 0.5) * pitch
         const y = top + (Math.floor(led / columns) + 0.5) * pitch
-        const fill = lit ? cssColor(color) : UNLIT
-        context.shadowColor = fill
-        context.shadowBlur = lit ? pitch * 0.6 : 0
-        context.fillStyle = fill
         context.beginPath()
-        context.arc(x, y, radius, 0, Math.PI * 2)
-        context.fill()
+        if (lit) {
+          const fill = cssColor(color)
+          context.shadowColor = fill
+          context.shadowBlur = pitch * 0.6
+          context.fillStyle = fill
+          context.arc(x, y, radius, 0, Math.PI * 2)
+          context.fill()
+        } else {
+          context.shadowBlur = 0
+          context.strokeStyle = UNLIT
+          context.lineWidth = 1
+          context.arc(x, y, radius - 0.5, 0, Math.PI * 2)
+          context.stroke()
+        }
       }
       top += blocks[index] * pitch + STRAND_GAP
     })
@@ -96,6 +107,9 @@ export default function PreviewStrip({ pattern, totalLeds, segments, known }) {
       <Box
         component="canvas"
         ref={canvasRef}
+        role="img"
+        aria-label={`Preview of the pattern across ${totalLeds} LEDs`}
+        aria-describedby={captionId}
         sx={{
           display: 'block',
           width: '100%',
@@ -105,7 +119,12 @@ export default function PreviewStrip({ pattern, totalLeds, segments, known }) {
           borderColor: 'divider',
         }}
       />
-      <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+      <Typography
+        id={captionId}
+        variant="caption"
+        color="text.secondary"
+        sx={{ mt: 0.5, display: 'block' }}
+      >
         {known
           ? `${totalLeds} LEDs across ${segments.length} strand${segments.length === 1 ? '' : 's'}: ` +
             segments.map((segment) => `${segment.name} (${segment.number_of_led})`).join(' · ')

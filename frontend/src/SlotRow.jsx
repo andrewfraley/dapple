@@ -48,11 +48,17 @@ export default function SlotRow({
             height: 48,
             p: 0,
             border: 1,
-            borderColor: 'divider',
+            borderColor: 'grey.600',
             borderRadius: 1.5,
             background: 'none',
             cursor: 'pointer',
             flexShrink: 0,
+            overflow: 'hidden',
+            // Browsers pad the swatch and give it a border of its own, which
+            // shows up as a second outline inside ours.
+            '&::-webkit-color-swatch-wrapper': { p: 0 },
+            '&::-webkit-color-swatch': { border: 'none' },
+            '&::-moz-color-swatch': { border: 'none' },
           }}
         />
         <Box
@@ -61,7 +67,7 @@ export default function SlotRow({
             height: 28,
             borderRadius: '50%',
             border: 1,
-            borderColor: 'divider',
+            borderColor: 'grey.600',
             backgroundColor: cssColor(slot.rgbw),
             flexShrink: 0,
           }}
@@ -103,23 +109,38 @@ export default function SlotRow({
       )}
 
       <Stack direction="row" spacing={0.5} justifyContent="flex-end">
-        <Tooltip title="Move up">
+        <Tooltip describeChild title="Move up">
           <span>
-            <IconButton size="small" disabled={!canMoveUp} onClick={() => onMove(-1)}>
+            <IconButton
+              size="small"
+              disabled={!canMoveUp}
+              onClick={() => onMove(-1)}
+              aria-label={`Move color ${index + 1} up`}
+            >
               <ArrowUpwardIcon fontSize="small" />
             </IconButton>
           </span>
         </Tooltip>
-        <Tooltip title="Move down">
+        <Tooltip describeChild title="Move down">
           <span>
-            <IconButton size="small" disabled={!canMoveDown} onClick={() => onMove(1)}>
+            <IconButton
+              size="small"
+              disabled={!canMoveDown}
+              onClick={() => onMove(1)}
+              aria-label={`Move color ${index + 1} down`}
+            >
               <ArrowDownwardIcon fontSize="small" />
             </IconButton>
           </span>
         </Tooltip>
-        <Tooltip title="Remove color">
+        <Tooltip describeChild title="Remove color">
           <span>
-            <IconButton size="small" disabled={!canRemove} onClick={onRemove}>
+            <IconButton
+              size="small"
+              disabled={!canRemove}
+              onClick={onRemove}
+              aria-label={`Remove color ${index + 1}`}
+            >
               <DeleteOutlineIcon fontSize="small" />
             </IconButton>
           </span>
