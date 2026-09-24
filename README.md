@@ -200,7 +200,7 @@ Everything Dapple remembers lives in the `data` folder next to `docker-compose.y
 Back up that folder and you've backed up everything. It's all plain text, so you can read and
 edit it if you want to.
 
-To update Dapple later: `docker compose pull` then `docker compose up -d`. Your `data` folder is
+To update Dapple later, run `docker compose up -d` again. It fetches the newest version first. Your `data` folder is
 left alone.
 
 To stop it: `docker compose down`. To start it again: `docker compose up -d`.

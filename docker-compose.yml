@@ -1,6 +1,7 @@
 services:
   dapple:
     image: afraley/dapple:latest
+    pull_policy: always  # fetch the newest image on every `docker compose up`
     container_name: dapple
     environment:
       - PUID=1000        # on Linux, what `id -u` prints — the owner of ./data
