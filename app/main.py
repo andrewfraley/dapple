@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
+from importlib.metadata import version
 from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Request
@@ -139,7 +140,9 @@ async def _startup_refresh(app: FastAPI) -> None:
         log.error("Startup refresh failed: %s", exc)
 
 
-app = FastAPI(title="Dapple", version="0.3.0", lifespan=lifespan)
+# pyproject.toml is the one place the version is written; the image and a dev
+# checkout both install the package, so its metadata is always there.
+app = FastAPI(title="Dapple", version=version("dapple"), lifespan=lifespan)
 
 
 def manager(request: Request) -> DeviceManager:
