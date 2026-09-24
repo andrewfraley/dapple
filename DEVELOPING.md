@@ -293,7 +293,25 @@ starts at its own LED 0. That's a bug.
 | Push | Tags |
 |---|---|
 | `main` | `latest`, `sha-<commit>` |
+| any other branch, e.g. `mqtt-discovery` | `mqtt-discovery`, `sha-<commit>` |
 | tag `v1.2.3` | `1.2.3`, `1.2`, `sha-<commit>` |
+
+A branch build never touches `latest` or a version tag, so it's safe to push work in progress.
+Slashes in a branch name become dashes (`feature/x` → `feature-x`).
+
+**Testing a branch build.** On the machine that runs Dapple, point `docker-compose.yml` at the
+branch tag and pull it:
+
+```yaml
+    image: afraley/dapple:mqtt-discovery
+```
+
+```bash
+docker compose up -d
+```
+
+`pull_policy: always` fetches the newest build of the branch on every `up`. Put `latest` back
+once the branch has merged. Branch tags stay on Docker Hub until you delete them there.
 
 Publishing needs a repository **variable** `DOCKERHUB_USERNAME` and a **secret** `DOCKERHUB_TOKEN`
 (a Docker Hub access token with read/write scope). Without them the workflow still builds and

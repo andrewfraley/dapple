@@ -2,7 +2,9 @@ name: Build and publish
 
 on:
   push:
-    branches: [main]
+    # Every branch builds, so a feature branch can be pulled and tried on real
+    # strands before it merges. Only main moves `latest`.
+    branches: ["**"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
@@ -59,9 +61,12 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE != '/dapple' && env.IMAGE || 'dapple' }}
-          # main → latest; v1.2.3 → 1.2.3 and 1.2; every build also gets its commit sha.
+          # main → latest; v1.2.3 → 1.2.3 and 1.2; any other branch → its own name
+          # (slashes become dashes). Every build also gets its commit sha. A branch
+          # build can never move `latest` or a version tag.
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch,enable=${{ github.ref_name != github.event.repository.default_branch }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha

@@ -139,7 +139,9 @@ This repo is open source; `data/` and `.env` are the only places real details ma
   the LinuxServer.io shape — literal values users edit, no `.env` — because that's what
   homelab users already know; only the override reads `DAPPLE_PORT`.
 - The repo is public on GitHub (`andrewfraley/dapple`); the image is `afraley/dapple` on Docker Hub,
-  published by `.github/workflows/docker.yml`. `docker-compose.yml` must stay usable on its own
-  (users download only that file), so anything that needs the source goes in the override.
+  published by `.github/workflows/docker.yml`. Every branch push publishes
+  `afraley/dapple:<branch>` for testing on the real strands; only main moves `latest`, and only
+  `v*` tags make versions. `docker-compose.yml` must stay usable on its own (users download only
+  that file), so anything that needs the source goes in the override.
   Check `git status` before committing:
   `data/`, `.env`, `frontend/dist/` and `*.egg-info/` must stay untracked.
