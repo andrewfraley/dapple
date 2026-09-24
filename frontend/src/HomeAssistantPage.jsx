@@ -93,7 +93,9 @@ export default function HomeAssistantPage() {
       .catch((error) =>
         setMessage({ severity: 'error', text: `Could not read the settings: ${error.message}` }),
       )
-    const timer = setInterval(readStatus, STATUS_POLL_MS)
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') readStatus()
+    }, STATUS_POLL_MS)
     return () => clearInterval(timer)
   }, [readStatus])
 
