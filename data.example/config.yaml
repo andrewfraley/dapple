@@ -44,3 +44,15 @@ groups:
 # sRGB → PWM gamma. 2.2 makes the strand match the on-screen preview; raise it
 # for deeper colors, or set 1.0 to send values through untouched.
 # gamma: 2.2
+
+# Home Assistant over MQTT. The Home Assistant tab writes this; each group then
+# shows up in HA as a light. Off until 'enabled' is true. The password is stored
+# here in plain text.
+# mqtt:
+#   enabled: true
+#   host: 192.168.1.20
+#   port: 1883
+#   username: dapple
+#   password: secret
+#   discovery_prefix: homeassistant
+#   topic_prefix: dapple

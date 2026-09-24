@@ -191,7 +191,7 @@ Everything Dapple remembers lives in the `data` folder next to `docker-compose.y
 
 | File | What's in it |
 |---|---|
-| `config.yaml` | your strands, their addresses, and which group each is in |
+| `config.yaml` | your strands, their addresses, which group each is in, and your Home Assistant connection (including its password, so keep the folder private) |
 | `presets.json` | your saved patterns |
 | `state.json` | what each group is currently showing |
 
@@ -207,8 +207,9 @@ To stop it: `docker compose down`. To start it again: `docker compose up -d`.
 
 ## Going further
 
-- **[HOME_ASSISTANT.md](HOME_ASSISTANT.md)** — drive your lights from Home Assistant
-  automations, dashboards and voice commands.
+- **[HOME_ASSISTANT.md](HOME_ASSISTANT.md)** — each group shows up in Home Assistant as a
+  light, with your presets as its effects. Switch it on in the **Home Assistant** tab; there are
+  no Home Assistant files to edit.
 - **[DEVELOPING.md](DEVELOPING.md)** — the REST API, how the pattern maths works, and how to run
   Dapple from source.
 

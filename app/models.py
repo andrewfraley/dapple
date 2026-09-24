@@ -216,3 +216,31 @@ class ReorderRequest(BaseModel):
 
     #: Every host in the group, in the new physical order.
     hosts: list[str]
+
+
+class MqttSettings(BaseModel):
+    """The Home Assistant tab. The password itself is never sent back."""
+
+    enabled: bool
+    host: str | None = None
+    port: int = 1883
+    username: str | None = None
+    password_set: bool = False
+    discovery_prefix: str = "homeassistant"
+    topic_prefix: str = "dapple"
+    status: Literal["disabled", "connecting", "connected", "error"]
+    error: str | None = None
+
+
+class MqttUpdate(BaseModel):
+    """Leave ``password`` out to keep the saved one; send ``""`` to clear it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    host: str | None = None
+    port: Annotated[int, Field(ge=1, le=65535)] = 1883
+    username: str | None = None
+    password: str | None = None
+    discovery_prefix: str = "homeassistant"
+    topic_prefix: str = "dapple"

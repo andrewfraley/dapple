@@ -414,6 +414,21 @@ class DeviceManager:
         )
         return self._with_groups(infos)
 
+    async def live_state(self) -> list[DeviceInfo]:
+        """Every strand's mode and brightness as it is right now.
+
+        Strands that were unreachable are probed again first; otherwise one
+        that was unplugged at boot would read as gone until the next restart.
+        """
+
+        def read(device: Device) -> DeviceInfo:
+            if not device.reachable:
+                device.refresh()
+            return device.info(with_live_state=True)
+
+        infos = await asyncio.gather(*(asyncio.to_thread(read, device) for device in self.devices))
+        return self._with_groups(infos)
+
     def _with_groups(self, infos: Sequence[DeviceInfo]) -> list[DeviceInfo]:
         """Tag each strand with the group it belongs to, for the Strands page."""
         group_of = {device.host: group.id for group in self.groups for device in group.devices}

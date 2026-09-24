@@ -1,149 +1,119 @@
 # Dapple with Home Assistant
 
-Dapple has no Home Assistant integration to install. It exposes plain HTTP endpoints, and
-Home Assistant's built-in `rest_command` calls them. Everything below goes in your
-`configuration.yaml`.
+Each Dapple group shows up in Home Assistant as a **light**. You can switch it on and off, set
+its brightness, and pick any of your presets as its **effect**. Home Assistant always shows what
+the strands are really doing, even when something other than Dapple changed them.
 
-Replace `dapple.lan:8080` throughout with wherever Dapple is running — an address like
-`192.168.1.10:8080` is fine.
-
----
-
-## The one thing to know first
-
-**Every call names a group.** Dapple has no "all lights" command, because a group is the thing
-that holds a pattern and there is no such thing as a pattern for everything at once.
-
-Group ids are what you write in automations. Find them on the Strands tab — the group named
-"Christmas tree" gets the id `christmas-tree` — or by opening
-`http://dapple.lan:8080/api/groups` in a browser.
-
-**A group's id never changes, even when you rename it.** Rename "Tree" to "Big tree" and your
-automations keep working.
+There's nothing to add to Home Assistant's `configuration.yaml`. Dapple talks to Home Assistant
+over MQTT and sets up the lights itself. It's off until you set it up.
 
 ---
 
-## Commands
+## Setting it up
 
-```yaml
-rest_command:
-  dapple_preset:
-    url: "http://dapple.lan:8080/api/groups/{{ group }}/preset"
-    method: POST
-    content_type: "application/json"
-    payload: '{"name": "{{ name }}"}'
+1. **Give Home Assistant an MQTT broker, if it doesn't have one.** Install the **Mosquitto
+   broker** add-on and start it. Home Assistant then offers to set up the **MQTT** integration:
+   accept. If you already use MQTT (for Zigbee2MQTT, say), skip this step.
+2. **Make a login for Dapple.** The Mosquitto add-on accepts any Home Assistant user. Create one
+   just for Dapple under Settings → People → Users.
+3. **Fill in Dapple's Home Assistant tab.**
+   - The broker address is your Home Assistant's address, e.g. `192.168.1.20`.
+   - The port is `1883`.
+   - The username and password are the ones from step 2.
 
-  dapple_brightness:
-    url: "http://dapple.lan:8080/api/groups/{{ group }}/brightness"
-    method: POST
-    content_type: "application/json"
-    payload: '{"value": {{ value }}}'
+   Turn on **Connect to Home Assistant** (it starts off) and press **Save**. The tab should say
+   **Connected** within a few seconds. If it says something else, see
+   [If it doesn't connect](#if-it-doesnt-connect).
 
-  dapple_on:
-    url: "http://dapple.lan:8080/api/groups/{{ group }}/on"
-    method: POST
+The password is saved in `config.yaml` in Dapple's `data` folder, so keep that folder private.
+Dapple's page never shows it again: the field stays blank, and leaving it blank keeps the saved
+one.
 
-  dapple_off:
-    url: "http://dapple.lan:8080/api/groups/{{ group }}/off"
-    method: POST
-```
+Your groups now appear under Settings → Devices & services → MQTT, one device per group. The
+light is named after the group: "Christmas tree" becomes `light.christmas_tree`. Put each one
+in an area as you would any other device.
 
-Call them like this:
-
-```yaml
-- service: rest_command.dapple_preset
-  data:
-    group: tree
-    name: Halloween
-```
-
-The preset name goes in the body rather than the URL so that names with spaces — `Warm white`
-is one of the built-in presets — need no escaping.
+**Renaming a group in Dapple renames the light**, and nothing breaks: automations and dashboards
+follow Home Assistant's internal id, which never changes. Deleting a group removes its light.
+Saving or deleting a preset updates every light's effect list straight away.
 
 ---
 
-## A dropdown per group
+## Using the lights
 
-This gives you a picker on a dashboard that sets the tree, with "Off" as one of the choices:
+They're ordinary lights, so everything Home Assistant does with lights works: dashboards,
+scenes, automations and voice.
+
+Set a preset from an automation or script:
 
 ```yaml
-input_select:
-  dapple_tree:
-    name: Tree
-    options: ["Off", "Halloween", "Christmas", "Warm white"]
-
-automation:
-  - alias: Tree palette
-    trigger:
-      - platform: state
-        entity_id: input_select.dapple_tree
-    action:
-      - choose:
-          - conditions: "{{ trigger.to_state.state == 'Off' }}"
-            sequence:
-              - service: rest_command.dapple_off
-                data:
-                  group: tree
-        default:
-          - service: rest_command.dapple_preset
-            data:
-              group: tree
-              name: "{{ trigger.to_state.state }}"
+action: light.turn_on
+target:
+  entity_id: light.christmas_tree
+data:
+  effect: Halloween
 ```
 
-For a second group, copy both blocks and change `dapple_tree` → `dapple_porch` and
-`group: tree` → `group: porch`.
+Add `brightness_pct: 40` to set the brightness too. Turning a light off leaves its pattern on
+the strands, and turning it back on brings the same pattern back.
 
-The `options:` list has to be kept in step with your presets by hand. This sensor lets you spot
-when they've drifted apart:
+**Everything off at once:** target an area, or make a light group (Settings → Devices &
+services → Helpers → Group → Light group) with all your Dapple lights in it:
 
 ```yaml
-rest:
-  - resource: "http://dapple.lan:8080/api/presets"
-    scan_interval: 300
-    sensor:
-      - name: dapple_presets
-        value_template: "{{ value_json | list | join(',') }}"
+action: light.turn_off
+target:
+  area_id: garden
+```
+
+**Voice:** Assist understands "turn off the Christmas tree" and "set the Christmas tree to 40%"
+with no setup. To choose a preset by voice, add a sentence trigger:
+
+```yaml
+triggers:
+  - trigger: conversation
+    command: "set the tree to {preset}"
+actions:
+  - action: light.turn_on
+    target:
+      entity_id: light.christmas_tree
+    data:
+      effect: "{{ trigger.slots.preset }}"
 ```
 
 ---
 
-## Turning everything off
+## Alongside the Twinkly integration
 
-Since there's no whole-house command, list your groups explicitly:
+Home Assistant's built-in **Twinkly** integration is fine to keep. The two do different jobs:
 
-```yaml
-script:
-  dapple_all_off:
-    alias: All Twinkly off
-    sequence:
-      - repeat:
-          for_each: ["tree", "porch"]
-          sequence:
-            - service: rest_command.dapple_off
-              data:
-                group: "{{ repeat.item }}"
-```
+- **Twinkly** gives you one light per *strand*, with Twinkly's own colors and effects.
+- **Dapple** gives you one light per *group* (which might be several strands wired together),
+  with your presets as its effects.
 
-You have to add a new group to that list by hand. That's deliberate: building the list from a
-sensor would mean the script quietly does nothing at all on the night Dapple happens to be
-unreachable, and you'd find the lights still on in the morning. A list you maintain fails in a
-way you'll notice — the forgotten group stays lit — rather than silently.
+They cooperate:
+- Switching a strand off and on with the Twinkly integration brings Dapple's pattern back.
+- Brightness is the same setting on both.
+- If you pick a Twinkly color or effect, that replaces Dapple's pattern until you choose a
+  preset again. The Dapple light then shows **no effect**.
+
+Dapple reads the strands about once a minute, so changes made with the Twinkly integration or
+the Twinkly phone app appear on the Dapple light within a minute.
+
+A Dapple light shows as **unavailable** when none of its strands answer, or when Dapple itself
+is stopped.
 
 ---
 
-## The UI on a dashboard
+## Dapple's own page in Home Assistant
 
-```yaml
-panel_iframe:
-  dapple:
-    title: Twinkly
-    icon: mdi:string-lights
-    url: "http://dapple.lan:8080/"
-```
+To open Dapple's editor from the Home Assistant sidebar, go to Settings → Dashboards → Add
+dashboard → **Webpage**, and enter Dapple's address, e.g. `http://192.168.1.10:8080/`.
 
-The page remembers where you are in its address, so you can link straight to a particular
-screen:
+If you reach Home Assistant over `https://`, the browser will refuse to show a plain `http://`
+page inside it. Either put Dapple behind the same HTTPS proxy, or open Dapple in its own tab.
+
+The address can point at a particular screen:
 
 | Address | Opens on |
 |---|---|
@@ -153,55 +123,74 @@ screen:
 
 ---
 
-## Voice
+## If it doesn't connect
 
-Once the `input_select` above exists, "Hey Google, set Tree to Halloween" works through Home
-Assistant's usual assistant exposure — no extra Dapple configuration.
+The Home Assistant tab shows the reason. The usual ones:
 
-For a spoken command that doesn't map to a dropdown, call the `rest_command` from an intent
-script:
-
-```yaml
-intent_script:
-  SetTwinkly:
-    speech:
-      text: "Setting the tree to {{ preset }}"
-    action:
-      - service: rest_command.dapple_preset
-        data:
-          group: tree
-          name: "{{ preset }}"
-```
+- **Connection refused, or timed out:** the address or port is wrong, or Mosquitto isn't
+  running.
+- **Not authorized, or bad username or password:** check the login from step 2.
+- **Connected, but no lights appear:** the MQTT integration isn't set up in Home Assistant, or
+  its discovery prefix was changed from `homeassistant`. Set the same prefix under
+  **Advanced** on Dapple's tab.
+- **Running two copies of Dapple** (a test copy, say) against one broker: give each its own
+  **topic prefix** under Advanced (e.g. `dapple-test`). Otherwise they take over each other's
+  lights.
 
 ---
 
-## Checking it worked
+## Without MQTT
 
-`rest_command` reports success whenever Dapple answers, which it does even when a strand is
-unplugged — the reply says which strands took the pattern and which didn't. To act on that, use
-the response:
+If you'd rather not run a broker, Home Assistant's `rest_command` can call Dapple directly. You
+lose the automatic lights and the state updates, and have to write the YAML yourself. Put this
+in `configuration.yaml`, replacing `dapple.lan:8080` with Dapple's address:
 
 ```yaml
-- service: rest_command.dapple_preset
+rest_command:
+  dapple_preset:
+    url: "http://dapple.lan:8080/api/groups/{{ group }}/preset"
+    method: POST
+    content_type: "application/json"
+    payload: '{"name": "{{ name }}"}'
+  dapple_brightness:
+    url: "http://dapple.lan:8080/api/groups/{{ group }}/brightness"
+    method: POST
+    content_type: "application/json"
+    payload: '{"value": {{ value }}}'
+  dapple_on:
+    url: "http://dapple.lan:8080/api/groups/{{ group }}/on"
+    method: POST
+  dapple_off:
+    url: "http://dapple.lan:8080/api/groups/{{ group }}/off"
+    method: POST
+```
+
+```yaml
+action: rest_command.dapple_preset
+data:
+  group: tree
+  name: Halloween
+```
+
+`group` is the group's id: "Christmas tree" gets `christmas-tree`. The group's **Rename**
+dialog on the Strands tab shows it, and so does `http://dapple.lan:8080/api/groups`. It never
+changes, even when you rename the group.
+
+Dapple answers even when a strand is unplugged. The reply says which strands took the change:
+
+```yaml
+- action: rest_command.dapple_preset
   data:
     group: tree
     name: Halloween
   response_variable: result
 - condition: template
   value_template: "{{ not result.content.ok }}"
-- service: notify.persistent_notification
+- action: persistent_notification.create
   data:
     message: >-
       Twinkly trouble:
       {{ result.content.results | rejectattr('ok') | map(attribute='name') | join(', ') }}
 ```
 
-`http://dapple.lan:8080/api/health` is a quick check that Dapple is up and can see every strand,
-if you'd rather monitor it that way.
-
----
-
-## Everything else
-
-The full list of endpoints, including creating and rearranging groups, is in
-[DEVELOPING.md](DEVELOPING.md).
+The full list of endpoints is in [DEVELOPING.md](DEVELOPING.md).

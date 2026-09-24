@@ -10,10 +10,11 @@ import Typography from '@mui/material/Typography'
 import RefreshIcon from '@mui/icons-material/Refresh'
 
 import * as api from './api.js'
+import HomeAssistantPage from './HomeAssistantPage.jsx'
 import PatternPage from './PatternPage.jsx'
 import StrandsPage from './StrandsPage.jsx'
 
-const TABS = ['pattern', 'strands']
+const TABS = ['pattern', 'strands', 'home-assistant']
 
 /** `#pattern/tree` → {tab: 'pattern', groupId: 'tree'}. */
 function routeFromHash() {
@@ -22,7 +23,7 @@ function routeFromHash() {
 }
 
 /**
- * The shell: two pages, and the group list both of them work from.
+ * The shell: the pages, and the group list they work from.
  *
  * The tab and the selected group live in the URL hash, so Home Assistant can
  * link straight at `…:8080/#pattern/tree` and a reload comes back where you
@@ -77,20 +78,41 @@ export default function App() {
         elevation={0}
         sx={{ borderBottom: 1, borderColor: 'divider' }}
       >
-        <Toolbar variant="dense" sx={{ gap: 2 }}>
+        <Toolbar variant="dense" sx={{ gap: { xs: 1, sm: 2 } }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Box component="img" src="/favicon.svg" alt="" sx={{ width: 28, height: 28 }} />
-            <Typography variant="h6" component="h1">
+            {/* Room for three tabs on a phone; the logo still says whose app it is. */}
+            <Typography variant="h6" component="h1" sx={{ display: { xs: 'none', sm: 'block' } }}>
               Dapple
             </Typography>
           </Box>
           <Tabs
             value={route.tab}
             onChange={(_event, tab) => navigate(tab, tab === 'pattern' ? groupId : null)}
-            sx={{ flexGrow: 1, minHeight: 'auto' }}
+            variant="scrollable"
+            scrollButtons={false}
+            sx={{
+              flexGrow: 1,
+              minHeight: 'auto',
+              '& .MuiTab-root': { minWidth: 0, px: { xs: 1, sm: 2 } },
+            }}
           >
             <Tab label="Pattern" value="pattern" />
             <Tab label="Strands" value="strands" />
+            <Tab
+              value="home-assistant"
+              aria-label="Home Assistant"
+              label={
+                <>
+                  <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                    Home Assistant
+                  </Box>
+                  <Box component="span" sx={{ display: { sm: 'none' } }}>
+                    HA
+                  </Box>
+                </>
+              }
+            />
           </Tabs>
           <IconButton onClick={recheck} aria-label="Re-read strands">
             <RefreshIcon />
@@ -99,7 +121,9 @@ export default function App() {
       </AppBar>
 
       <Container component="main" maxWidth="md" sx={{ pt: 2 }}>
-        {route.tab === 'strands' ? (
+        {route.tab === 'home-assistant' ? (
+          <HomeAssistantPage />
+        ) : route.tab === 'strands' ? (
           <StrandsPage groups={groups} onChanged={reload} />
         ) : (
           <PatternPage

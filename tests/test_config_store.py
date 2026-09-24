@@ -9,6 +9,7 @@ from app.config import (
     ConfigStorageError,
     ConfigStore,
     DeviceConfig,
+    MqttConfig,
     UnknownGroupError,
     load_config,
     normalize_device,
@@ -415,12 +416,14 @@ def test_a_failed_write_changes_nothing(tmp_path):
         lambda: store.delete("10.0.0.1"),
         lambda: store.move("10.0.0.1", "porch"),
         lambda: store.reorder("tree", ["10.0.0.2", "10.0.0.1"]),
+        lambda: store.set_mqtt(MqttConfig(host="10.0.0.50", enabled=True)),
     ]
     for attempt in attempts:
         with pytest.raises(ConfigStorageError):
             attempt()
 
     assert [(g.id, g.name, [d.host for d in g.devices]) for g in store.groups] == snapshot
+    assert store.config.mqtt is None
 
 
 def test_next_names_count_up(store):

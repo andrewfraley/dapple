@@ -3,7 +3,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app.config import AppConfig, ConfigStore, DeviceConfig, load_config
+from app.config import AppConfig, ConfigStore, DeviceConfig, MqttConfig, load_config
 from app.main import app
 from app.models import DeviceInfo, DeviceResult, StrandSegment
 from app.presets import PresetStore
@@ -179,6 +179,33 @@ class FakeManager:
         return self._results(self.group(group_id))
 
 
+class FakeBridge:
+    """Stands in for mqtt.MqttBridge: records what the routes told it."""
+
+    def __init__(self):
+        self.status = "disabled"
+        self.error = None
+        self.changed = []
+        self.config_changes = 0
+        self.restarts = 0
+
+    def group_changed(self, group_id):
+        self.changed.append(group_id)
+
+    def config_changed(self):
+        self.config_changes += 1
+
+    def start(self):
+        pass
+
+    async def stop(self):
+        pass
+
+    async def restart(self):
+        self.restarts += 1
+        self.status = "connecting"
+
+
 @pytest.fixture
 def config(tmp_path):
     return AppConfig(data_dir=tmp_path, config_path=tmp_path / "config.yaml")
@@ -195,6 +222,7 @@ def build_client(config, manager, seed_presets=True):
     app.state.presets = PresetStore(config.presets_path, seed_defaults=seed_presets)
     app.state.group_state = StateStore(config.state_path)
     app.state.strands = ConfigStore(config)
+    app.state.mqtt = FakeBridge()
     manager.store = app.state.strands
     return TestClient(app)
 
@@ -723,3 +751,100 @@ def test_an_apply_still_succeeds_when_state_cannot_be_written(tmp_path):
     assert response.status_code == 200
     assert response.json()["ok"] is True
     assert listed["state_writable"] is False
+
+
+# ---- home assistant over mqtt ------------------------------------------------
+
+
+def test_mqtt_starts_out_switched_off(client):
+    assert client.get("/api/config/mqtt").json() == {
+        "enabled": False,
+        "host": None,
+        "port": 1883,
+        "username": None,
+        "password_set": False,
+        "discovery_prefix": "homeassistant",
+        "topic_prefix": "dapple",
+        "status": "disabled",
+        "error": None,
+    }
+
+
+def test_saving_mqtt_settings_reconnects_and_writes_the_file(client, config):
+    response = client.put(
+        "/api/config/mqtt",
+        json={"enabled": True, "host": "10.0.0.50", "username": "ha", "password": "secret"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "connecting"
+    assert app.state.mqtt.restarts == 1
+    assert "secret" in config.config_path.read_text()
+
+
+def test_mqtt_stays_off_unless_it_is_switched_on(client, config):
+    """Filling in the address alone mustn't start publishing to someone's broker."""
+    body = client.put("/api/config/mqtt", json={"host": "10.0.0.50"}).json()
+
+    assert (body["enabled"], config.mqtt.enabled) == (False, False)
+
+
+def test_the_mqtt_password_is_never_sent_back(client):
+    """The settings page is on the LAN with no auth; the password stays in /data."""
+    client.put("/api/config/mqtt", json={"host": "10.0.0.50", "password": "secret"})
+
+    for body in (client.get("/api/config/mqtt").text, client.get("/api/config").text):
+        assert "secret" not in body
+    assert client.get("/api/config/mqtt").json()["password_set"] is True
+
+
+def test_leaving_the_password_out_keeps_the_saved_one(client, config):
+    """The form can't show the password, so saving it unchanged must not wipe it."""
+    client.put("/api/config/mqtt", json={"host": "10.0.0.50", "password": "secret"})
+    client.put("/api/config/mqtt", json={"host": "10.0.0.51"})
+    assert config.mqtt.password == "secret"
+
+    client.put("/api/config/mqtt", json={"host": "10.0.0.51", "password": ""})
+    assert config.mqtt.password is None
+
+
+def test_switching_mqtt_off_keeps_the_settings_for_next_time(client, config):
+    client.put(
+        "/api/config/mqtt", json={"enabled": True, "host": "10.0.0.50", "password": "secret"}
+    )
+    body = client.put("/api/config/mqtt", json={"enabled": False, "host": "10.0.0.50"}).json()
+
+    assert (body["enabled"], body["host"], body["password_set"]) == (False, "10.0.0.50", True)
+
+
+@pytest.mark.parametrize(
+    "payload,message",
+    [
+        ({"enabled": True, "host": ""}, "broker's address"),
+        ({"host": "mqtt://10.0.0.50"}, "not a URL"),
+        ({"host": "10.0.0.50", "topic_prefix": "Dapple/Dev"}, "topic prefix"),
+        ({"host": "10.0.0.50", "discovery_prefix": "home#"}, "discovery prefix"),
+    ],
+)
+def test_unusable_mqtt_settings_say_what_to_fix(client, payload, message):
+    response = client.put("/api/config/mqtt", json=payload)
+
+    assert response.status_code == 400
+    assert message in response.json()["detail"]
+    assert app.state.mqtt.restarts == 0
+
+
+def test_applying_a_preset_tells_home_assistant(client):
+    client.post("/api/groups/tree/preset", json={"name": "Halloween"})
+    client.post("/api/groups/tree/off")
+
+    assert app.state.mqtt.changed == ["tree", "tree"]
+
+
+def test_preset_and_group_edits_update_home_assistant(client):
+    """New effect lists, renamed and deleted lights."""
+    client.put("/api/presets/Easter", json=PATTERN)
+    client.delete("/api/presets/Easter")
+    client.post("/api/config/groups", json={"name": "Porch"})
+
+    assert app.state.mqtt.config_changes == 3

@@ -40,6 +40,10 @@ GROUP_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
 #: available as a whole-house target without ever colliding with a real group.
 RESERVED_GROUP_IDS = frozenset({"order", "all", "new"})
 
+#: MQTT topic segments: no wildcards, no slashes, nothing HA would trip over.
+TOPIC_PREFIX_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
+DISCOVERY_PREFIX_PATTERN = re.compile(r"^[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*$")
+
 MAX_LEDS = 20000
 MAX_NAME = 64
 
@@ -88,6 +92,25 @@ class GroupConfig:
     devices: list[DeviceConfig] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class MqttConfig:
+    """The broker Dapple publishes Home Assistant discovery to.
+
+    Kept when switched off, so turning it back on doesn't mean typing the
+    password again.
+    """
+
+    host: str
+    port: int = 1883
+    username: str | None = None
+    password: str | None = None
+    enabled: bool = False
+    discovery_prefix: str = "homeassistant"
+    #: Also this Dapple's identity in HA. Two instances on one broker need
+    #: different prefixes, or each would take over the other's lights.
+    topic_prefix: str = "dapple"
+
+
 @dataclass
 class AppConfig:
     groups: list[GroupConfig] = field(default_factory=list)
@@ -100,6 +123,8 @@ class AppConfig:
     #: sRGB → PWM gamma. 2.2 makes the strand match the on-screen preview;
     #: raise it for deeper colors, or set 1.0 to send values through untouched.
     gamma: float = DEFAULT_GAMMA
+    #: None until someone fills in the Home Assistant tab.
+    mqtt: MqttConfig | None = None
     source: str = "none"
     config_path: Path | None = None
 
@@ -236,6 +261,32 @@ def _flat_devices_from_yaml(document: dict) -> list[DeviceConfig]:
     return [_device_from_yaml(entry, "top-level", index) for index, entry in enumerate(entries, 1)]
 
 
+def _mqtt_from_yaml(document: object) -> MqttConfig | None:
+    """The ``mqtt:`` block, or None.
+
+    A bad hand edit here disables MQTT with a log line rather than stopping the
+    app: the lights and the web UI don't depend on it.
+    """
+    if not isinstance(document, dict) or not document.get("mqtt"):
+        return None
+    entry = document["mqtt"]
+    try:
+        if not isinstance(entry, dict):
+            raise ConfigError("'mqtt' must be a mapping")
+        return normalize_mqtt(
+            host=entry.get("host"),
+            port=entry.get("port", 1883),
+            username=entry.get("username"),
+            password=entry.get("password"),
+            enabled=entry.get("enabled", False),
+            discovery_prefix=entry.get("discovery_prefix", "homeassistant"),
+            topic_prefix=entry.get("topic_prefix", "dapple"),
+        )
+    except (ConfigError, TypeError, ValueError) as exc:
+        log.error("config.yaml: ignoring the mqtt section: %s", exc)
+        return None
+
+
 def load_config(
     data_dir: Path | str | None = None,
     env: Mapping[str, str] | None = None,
@@ -268,6 +319,7 @@ def load_config(
             config.timeout = float(document["timeout"])
         if isinstance(document, dict) and document.get("gamma") is not None:
             config.gamma = float(document["gamma"])
+        config.mqtt = _mqtt_from_yaml(document)
         if groups:
             config.groups = groups
             config.source = str(config_path)
@@ -316,6 +368,62 @@ def normalize_device(
     )
 
 
+def normalize_mqtt(
+    host: str | None,
+    port: int = 1883,
+    username: str | None = None,
+    password: str | None = None,
+    enabled: bool = False,
+    discovery_prefix: str = "homeassistant",
+    topic_prefix: str = "dapple",
+) -> MqttConfig:
+    """Validate broker settings as they come in from the Home Assistant tab."""
+    host = (host or "").strip().rstrip("/")
+    if not host:
+        raise ConfigError(
+            "Enter your MQTT broker's address. With the Mosquitto add-on, "
+            "that's your Home Assistant's address."
+        )
+    if "://" in host:
+        raise ConfigError(f"Enter just the hostname or IP, not a URL: {host!r}")
+    if not HOST_PATTERN.match(host):
+        raise ConfigError(f"{host!r} is not a valid hostname or IP address")
+    port = int(port)
+    if not 1 <= port <= 65535:
+        raise ConfigError("The port must be between 1 and 65535 (Mosquitto uses 1883)")
+    discovery_prefix = (discovery_prefix or "").strip()
+    if not DISCOVERY_PREFIX_PATTERN.match(discovery_prefix):
+        raise ConfigError(
+            f"{discovery_prefix!r} is not a usable discovery prefix; "
+            "Home Assistant's default is 'homeassistant'"
+        )
+    topic_prefix = (topic_prefix or "").strip()
+    if not TOPIC_PREFIX_PATTERN.match(topic_prefix):
+        raise ConfigError(
+            "The topic prefix must be lowercase letters, digits, - or _ (like 'dapple')"
+        )
+    return MqttConfig(
+        host=host,
+        port=port,
+        username=(username or "").strip() or None,
+        password=password or None,
+        enabled=bool(enabled),
+        discovery_prefix=discovery_prefix,
+        topic_prefix=topic_prefix,
+    )
+
+
+def _mqtt_to_yaml(mqtt: MqttConfig) -> dict:
+    entry = {"enabled": mqtt.enabled, "host": mqtt.host, "port": mqtt.port}
+    if mqtt.username is not None:
+        entry["username"] = mqtt.username
+    if mqtt.password is not None:
+        entry["password"] = mqtt.password
+    entry["discovery_prefix"] = mqtt.discovery_prefix
+    entry["topic_prefix"] = mqtt.topic_prefix
+    return entry
+
+
 def _device_to_yaml(device: DeviceConfig) -> dict:
     entry = {"name": device.name, "host": device.host}
     if device.number_of_led is not None:
@@ -345,6 +453,9 @@ HEADER = """\
 #
 # 'id' is what the API and Home Assistant address. It never changes, so renaming
 # a group is safe.
+#
+# 'mqtt' is written by the Home Assistant tab. The password is stored here in
+# plain text, so keep this file private.
 """
 
 
@@ -554,21 +665,31 @@ class ConfigStore:
         )
         return self.find_group(group_id).devices
 
+    # ---- home assistant ----------------------------------------------------
+
+    def set_mqtt(self, mqtt: MqttConfig | None) -> MqttConfig | None:
+        self._commit(mqtt=mqtt)
+        return self.config.mqtt
+
     # ---- persistence -------------------------------------------------------
 
-    def _commit(self, groups: list[GroupConfig]) -> None:
-        """Swap in a new group list, keeping the old one if the write fails.
+    def _commit(self, groups: list[GroupConfig] | None = None, **changes) -> None:
+        """Swap in new settings, keeping the old ones if the write fails.
 
         Otherwise a read-only /data would leave the running config holding
         something that isn't in the file — the next restart would lose it, and
         the error message would be a lie.
         """
-        previous = self.config.groups
-        self.config.groups = groups
+        if groups is not None:
+            changes["groups"] = groups
+        previous = {name: getattr(self.config, name) for name in changes}
+        for name, value in changes.items():
+            setattr(self.config, name, value)
         try:
             self.save()
         except ConfigStorageError:
-            self.config.groups = previous
+            for name, value in previous.items():
+                setattr(self.config, name, value)
             raise
 
     def save(self) -> None:
@@ -578,6 +699,9 @@ class ConfigStore:
             "timeout": self.config.timeout,
             "gamma": self.config.gamma,
         }
+        if self.config.mqtt is not None:
+            document["mqtt"] = _mqtt_to_yaml(self.config.mqtt)
+
         body = HEADER + yaml.safe_dump(document, sort_keys=False, default_flow_style=False)
         try:
             self._write_atomically(body)

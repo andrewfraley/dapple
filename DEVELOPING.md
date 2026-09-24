@@ -8,6 +8,8 @@ app/devices.py    xled wrapper, and DeviceGroup — where per-group offsets live
 app/config.py     groups and strands: config.yaml, and the Strands tab's edits
 app/presets.py    /data/presets.json, written atomically
 app/state.py      /data/state.json — what each group was last set to
+app/actions.py    apply / brightness / on / off, shared by the routes and MQTT
+app/mqtt.py       Home Assistant discovery: each group as an MQTT light
 app/models.py     pydantic models shared by the API and the stores
 app/main.py       FastAPI routes + static mount
 frontend/src/     React + MUI, Vite build
@@ -19,7 +21,7 @@ scripts/smoke.py  one strand, one pattern, from the command line
 ```bash
 uv venv && uv pip install -e ".[dev]"
 .venv/bin/pre-commit install               # Black and Prettier on every commit
-.venv/bin/python -m pytest                 # 260 tests, no network, no strands
+.venv/bin/python -m pytest                 # 314 tests, no network, no strands
 
 npm --prefix frontend install
 npm --prefix frontend test                 # the JS pattern port vs the Python fixtures
@@ -48,6 +50,7 @@ downloads. In a checkout, `docker-compose.override.yml` adds `build: .`, so
 | Frames per upload | `movie_frames` | `DAPPLE_MOVIE_FRAMES` | `1` |
 | Per-request timeout (s) | `timeout` | `DAPPLE_TIMEOUT` | `5.0` |
 | sRGB → PWM gamma | `gamma` | `DAPPLE_GAMMA` | `2.2` |
+| MQTT / Home Assistant | `mqtt` | — | off; the Home Assistant tab writes it |
 | Data directory | — | `DAPPLE_DATA_DIR` | `/data` |
 | Config file | — | `DAPPLE_CONFIG` | `<data>/config.yaml` |
 | Log level | — | `DAPPLE_LOG_LEVEL` | `INFO` |
@@ -69,6 +72,17 @@ groups:
         # that disagrees breaks the upload rather than fixing anything.
         # number_of_led: 250
         # led_profile: RGBW
+```
+
+```yaml
+mqtt:
+  enabled: true             # false, or missing, means off
+  host: 192.168.1.20
+  port: 1883
+  username: dapple
+  password: secret          # plain text; data/ is the only place it lives
+  discovery_prefix: homeassistant
+  topic_prefix: dapple      # also this instance's identity in HA
 ```
 
 `config.yaml` is the only way to configure strands: the Strands tab writes it, and you can
@@ -168,6 +182,8 @@ The preset name travels in the body rather than the path because preset names co
 | PUT | `/api/config/strands/{host}` | `{host, name?}` | |
 | PUT | `/api/config/strands/{host}/group` | `{"group": "tree", "index": 0}` | move between groups |
 | DELETE | `/api/config/strands/{host}` | | |
+| GET | `/api/config/mqtt` | | broker settings and connection `status`; never the password, only `password_set` |
+| PUT | `/api/config/mqtt` | `{enabled, host, port?, username?, password?, …}` | saves and reconnects; `enabled` defaults to false; omit `password` to keep the saved one, `""` clears it |
 
 A `Pattern`:
 
@@ -214,6 +230,47 @@ request:
 
 `state` is what was **last applied**, not a readback. The strands hold their movie themselves, so
 a power cycle or someone opening the Twinkly app can make it optimistic.
+
+---
+
+## MQTT
+
+`app/mqtt.py` publishes [Home Assistant MQTT discovery][discovery] once it's switched on in the
+Home Assistant tab. Each group is an HA light in
+the JSON schema, with its presets as the effect list. With the default prefixes:
+
+| Topic | Retained | What |
+|---|---|---|
+| `homeassistant/light/dapple/<group>/config` | yes | discovery; an empty payload removes the light |
+| `dapple/status` | yes | `online`, or `offline` (the connection's last will, and sent on shutdown) |
+| `dapple/<group>/state` | yes | `{"state": "ON", "brightness": 60, "effect": "Halloween", "color_mode": "brightness"}` |
+| `dapple/<group>/availability` | yes | `online` while any strand in the group answers |
+| `dapple/<group>/set` | | commands from HA, the same shape as state |
+
+[discovery]: https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery
+
+- **Commands** go through `GroupActions`, the same code as the REST routes, so they record
+  state exactly as a UI click does. `effect` applies the preset, `brightness` (0–100) follows,
+  and a bare `ON` or `OFF` switches power.
+- **State is read from the strands**, not from `state.json`. The native Twinkly integration and
+  the Twinkly app change them without Dapple knowing. A poll every 60s publishes only what
+  changed. The effect is cleared when a strand is in any mode other than `movie` or `off`,
+  because then it isn't showing the preset.
+- **Stale lights are cleaned up.** On connect Dapple subscribes to its own discovery topics and
+  clears any retained config for a group that no longer exists, e.g. one deleted while the
+  broker was down. `homeassistant/status` `online` (HA restarting) republishes everything.
+- **Settings live in `config.yaml`**, written by the Home Assistant tab through
+  `PUT /api/config/mqtt`. The password is write-only: responses carry `password_set`, never the
+  value. A broken `mqtt:` section is logged and treated as off; it doesn't stop Dapple.
+- **`topic_prefix` is the instance's identity.** It's in the topics, the discovery node id and
+  every `unique_id` (`dapple_tree`), so a second Dapple on the same broker needs a different
+  one.
+
+To watch the traffic:
+
+```bash
+docker run --rm --network host eclipse-mosquitto:2 mosquitto_sub -h <broker> -v -t 'dapple/#' -t 'homeassistant/light/dapple/#'
+```
 
 ---
 

@@ -9,7 +9,9 @@ async function request(path, options = {}) {
   const text = await response.text()
   const body = text ? JSON.parse(text) : null
   if (!response.ok) {
-    throw new Error(body?.detail ? JSON.stringify(body.detail) : `HTTP ${response.status}`)
+    const detail = body?.detail
+    if (!detail) throw new Error(`HTTP ${response.status}`)
+    throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail))
   }
   return body
 }
@@ -99,3 +101,11 @@ export const moveStrand = (host, group, index) =>
 
 export const deleteStrand = (host) =>
   request(`/api/config/strands/${encodeURIComponent(host)}`, { method: 'DELETE' })
+
+// ---- home assistant --------------------------------------------------------
+
+export const getMqtt = () => request('/api/config/mqtt')
+
+// Leave `password` out to keep the saved one; the server never sends it back.
+export const saveMqtt = (settings) =>
+  request('/api/config/mqtt', { method: 'PUT', body: JSON.stringify(settings) })

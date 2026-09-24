@@ -187,3 +187,32 @@ def test_scalars_from_env(tmp_path):
 
 def test_gamma_defaults_to_srgb(tmp_path):
     assert load_config(tmp_path, env={}).gamma == 2.2
+
+
+# ---- mqtt ------------------------------------------------------------------
+
+
+def test_mqtt_settings_round_trip_through_the_file(tmp_path):
+    from app.config import ConfigStore, MqttConfig
+
+    settings = MqttConfig(host="10.0.0.50", username="ha", password="pw", enabled=True)
+    ConfigStore(load_config(tmp_path, env={})).set_mqtt(settings)
+
+    assert load_config(tmp_path, env={}).mqtt == settings
+
+
+def test_a_hand_written_mqtt_section_without_enabled_stays_off(tmp_path):
+    """Home Assistant is opt-in: nothing connects until someone switches it on."""
+    write_config(tmp_path, GROUPED + "mqtt:\n  host: 10.0.0.50\n")
+
+    assert load_config(tmp_path, env={}).mqtt.enabled is False
+
+
+def test_a_broken_mqtt_section_switches_mqtt_off_rather_than_stopping_the_app(tmp_path):
+    """The lights and the UI don't need MQTT; a typo there shouldn't take them down."""
+    write_config(tmp_path, GROUPED + "mqtt:\n  enabled: true\n  host: mqtt://oops\n")
+
+    config = load_config(tmp_path, env={})
+
+    assert config.mqtt is None
+    assert config.groups

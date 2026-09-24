@@ -19,7 +19,7 @@ the API reference and internals. Keep them in their lanes — don't put REST tab
 ## Commands
 
 ```bash
-.venv/bin/python -m pytest -q                 # 260 tests, no network, no strands
+.venv/bin/python -m pytest -q                 # 314 tests, no network, no strands
 .venv/bin/pre-commit run --all-files          # Black + Prettier; the git hook runs this on staged files
 npm --prefix frontend test                    # JS pattern port vs Python fixtures
 npm --prefix frontend run build               # required before the Docker build picks up UI changes
@@ -76,6 +76,20 @@ covers every mutation for this reason.
 doesn't cost an auth token and a re-login. Adding a group field to `Device` or `DeviceConfig`
 would break that.
 
+**Group control has one code path: `GroupActions` (`app/actions.py`).** The REST routes and the
+MQTT bridge both call it, so an HA command records state and notifies the bridge exactly as a UI
+click does. Don't call `manager.apply_pattern` & co. from a route or from `mqtt.py` directly.
+
+**MQTT state is read back from the strands; `state.json` is what Dapple sent.** The poll never
+writes `state.json`. The native Twinkly integration is expected to be running alongside Dapple,
+so HA must show the live mode, not Dapple's last command.
+
+**MQTT is off by default and the password is write-only.** Settings live in `data/config.yaml`,
+written by the Home Assistant tab. `enabled` defaults to false everywhere (dataclass, YAML,
+`MqttUpdate`, the UI form), so filling in an address never starts publishing on its own.
+`GET /api/config/mqtt` returns `password_set`, never the value, and a PUT without `password`
+keeps the saved one.
+
 **A failed `state.json` write must not fail a request.** The lights already changed; a 500 would
 make Home Assistant retry a successful operation. A failed *config* write does 500 and rolls
 back, because there nothing happened and the user needs to know. This asymmetry is deliberate.
@@ -83,8 +97,9 @@ back, because there nothing happened and the user needs to know. This asymmetry 
 ## API shape
 
 Every mutating route names a group — there is no whole-house apply or off. The user chose this
-explicitly. If asked to add a convenience route, `all` is already a reserved group id, and the
-argument for it is power-only (`/api/groups/all/off`), never apply.
+explicitly. MQTT follows suit: one HA light per group, and "everything off" is HA's job (an area
+or light group). If asked to add a convenience route, `all` is already a reserved group id, and
+the argument for it is power-only (`/api/groups/all/off`), never apply.
 
 Preset names travel in request bodies, never path segments: `Warm white` is a built-in and path
 nesting a user string is an encoding bug waiting to happen.
@@ -100,11 +115,13 @@ HA automations survive a rename.
 - Tests are named as sentences about behavior (`test_two_groups_with_one_pattern_both_start_at_the_beginning`),
   and docstrings say *why the case matters*, not what the code does.
 - Fakes over mocks: `FakeControl` (records xled calls, `fail_once` for retry paths),
-  `FakeManager`/`FakeDevice` (duck-types `DeviceManager` for route tests). Async is driven with
+  `FakeManager`/`FakeDevice` (duck-types `DeviceManager` for route tests), `FakeBridge` (route
+  tests), and `FakeBroker` + `StrandManager` in `tests/test_mqtt.py` (retained messages, and
+  strands that remember their mode). Async is driven with
   plain `asyncio.run` — there's no pytest-asyncio dependency.
 - Comments explain the non-obvious *why*. Don't narrate what the line does.
 - Error messages tell the user what to do next ("Move or remove them first").
-- `tests/test_api.py` injects `app.state.{config,manager,presets,group_state,strands}` before
+- `tests/test_api.py` injects `app.state.{config,manager,presets,group_state,strands,mqtt}` before
   `TestClient(app)` starts; the lifespan's `hasattr` guards are what make that work. Adding a new
   store means adding a guard *and* setting it in `build_client`.
 
@@ -112,8 +129,7 @@ HA automations survive a rename.
 
 This repo is open source; `data/` and `.env` are the only places real details may live.
 
-- Never copy anything out of `data/`, `.env` or live API responses into tracked files. That covers
-  strand IPs, hostnames, MACs, serials, device names from the Twinkly app, and timestamps.
+- Never copy anything out of `data/`, `.env` or live API responses into tracked files. That covers strand IPs, broker addresses and logins, hostnames, MACs, serials, device names from the Twinkly app, and timestamps.
 - Example addresses are `192.168.40.21`, `.22`, `.30` in docs and UI placeholders (matching
   `data.example/config.yaml`), `192.168.1.x` for the machine running Dapple (README,
   HOME_ASSISTANT.md), and `10.0.0.x` in tests. Don't invent new ranges.

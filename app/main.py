@@ -12,6 +12,7 @@ from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.actions import EmptyGroupError, GroupActions
 from app.config import (
     AppConfig,
     ConfigError,
@@ -20,6 +21,7 @@ from app.config import (
     UnknownGroupError,
     load_config,
     normalize_device,
+    normalize_mqtt,
 )
 from app.devices import DeviceManager
 from app.models import (
@@ -35,6 +37,8 @@ from app.models import (
     GroupStatus,
     HealthResponse,
     MoveStrandRequest,
+    MqttSettings,
+    MqttUpdate,
     Pattern,
     PreviewRequest,
     PreviewResponse,
@@ -43,6 +47,7 @@ from app.models import (
     StrandConfigResult,
     StrandCreate,
 )
+from app.mqtt import MqttBridge
 from app.pattern import led_colors
 from app.presets import PresetError, PresetStorageError, PresetStore
 from app.state import StateStore
@@ -85,6 +90,14 @@ async def lifespan(app: FastAPI):
         app.state.presets = PresetStore(config.presets_path)
     if not hasattr(app.state, "group_state"):
         app.state.group_state = StateStore(config.state_path)
+    if not hasattr(app.state, "mqtt"):
+        app.state.mqtt = MqttBridge(
+            app.state.strands,
+            app.state.presets,
+            app.state.group_state,
+            app.state.manager,
+            version=app.version,
+        )
     if not app.state.presets.writable:
         log.warning("%s is not writable; presets cannot be saved", config.presets_path)
     log.info(
@@ -98,7 +111,9 @@ async def lifespan(app: FastAPI):
     )
     # Strands that are simply switched off shouldn't hold up startup.
     asyncio.create_task(_startup_refresh(app))
+    app.state.mqtt.start()
     yield
+    await app.state.mqtt.stop()
 
 
 async def _startup_refresh(app: FastAPI) -> None:
@@ -138,6 +153,19 @@ def group_state(request: Request) -> StateStore:
     return request.app.state.group_state
 
 
+def mqtt(request: Request) -> MqttBridge:
+    return request.app.state.mqtt
+
+
+def actions(request: Request) -> GroupActions:
+    return GroupActions(
+        manager(request),
+        presets(request),
+        group_state(request),
+        on_change=mqtt(request).group_changed,
+    )
+
+
 @app.exception_handler(PresetError)
 async def preset_error_handler(_request: Request, exc: PresetError) -> JSONResponse:
     return JSONResponse(status_code=404, content={"detail": str(exc)})
@@ -151,6 +179,11 @@ async def preset_storage_error_handler(_request: Request, exc: PresetStorageErro
 @app.exception_handler(UnknownGroupError)
 async def unknown_group_handler(_request: Request, exc: UnknownGroupError) -> JSONResponse:
     return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+
+@app.exception_handler(EmptyGroupError)
+async def empty_group_handler(_request: Request, exc: EmptyGroupError) -> JSONResponse:
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 
 @app.exception_handler(ConfigError)
@@ -210,14 +243,6 @@ def _group_status(request: Request, group) -> GroupStatus:
     )
 
 
-def _group_or_503(request: Request, group_id: str):
-    """The group's devices, or a 503 — an empty group has nothing to apply to."""
-    group = manager(request).group(group_id)
-    if not group.devices:
-        raise HTTPException(status_code=503, detail=f"Group {group.name!r} has no strands")
-    return group
-
-
 @app.get("/api/groups", response_model=list[GroupStatus])
 async def list_groups(request: Request) -> list[GroupStatus]:
     return [_group_status(request, group) for group in manager(request).groups]
@@ -230,10 +255,7 @@ async def get_group(request: Request, group_id: str) -> GroupStatus:
 
 @app.post("/api/groups/{group_id}/apply", response_model=ApplyResponse)
 async def apply_to_group(request: Request, group_id: str, pattern: Pattern) -> ApplyResponse:
-    group = _group_or_503(request, group_id)
-    results = await manager(request).apply_pattern(group.id, pattern)
-    group_state(request).record(group.id, pattern)
-    return _response(results)
+    return _response(await actions(request).apply_pattern(group_id, pattern))
 
 
 @app.post("/api/groups/{group_id}/preset", response_model=ApplyResponse)
@@ -246,38 +268,25 @@ async def apply_preset_to_group(
     spaces (``Warm white`` is one of the seeded defaults) and nesting a
     user-chosen string two segments deep is an encoding bug waiting to happen.
     """
-    pattern = presets(request).get(payload.name)
-    group = _group_or_503(request, group_id)
-    results = await manager(request).apply_pattern(group.id, pattern)
-    group_state(request).record(group.id, pattern, preset=payload.name)
-    return _response(results)
+    return _response(await actions(request).apply_preset(group_id, payload.name))
 
 
 @app.post("/api/groups/{group_id}/brightness", response_model=ApplyResponse)
 async def set_group_brightness(
     request: Request, group_id: str, payload: BrightnessRequest = Body(...)
 ) -> ApplyResponse:
-    group = _group_or_503(request, group_id)
-    results = await manager(request).set_brightness(group.id, payload.value)
-    group_state(request).set_brightness(group.id, payload.value)
-    return _response(results)
+    return _response(await actions(request).set_brightness(group_id, payload.value))
 
 
 @app.post("/api/groups/{group_id}/on", response_model=ApplyResponse)
 async def turn_group_on(request: Request, group_id: str) -> ApplyResponse:
-    group = _group_or_503(request, group_id)
-    results = await manager(request).turn_on(group.id)
-    group_state(request).set_power(group.id, True)
-    return _response(results)
+    return _response(await actions(request).turn_on(group_id))
 
 
 @app.post("/api/groups/{group_id}/off", response_model=ApplyResponse)
 async def turn_group_off(request: Request, group_id: str) -> ApplyResponse:
     """Off leaves the pattern on the strand — it just stops showing it."""
-    group = _group_or_503(request, group_id)
-    results = await manager(request).turn_off(group.id)
-    group_state(request).set_power(group.id, False)
-    return _response(results)
+    return _response(await actions(request).turn_off(group_id))
 
 
 @app.post("/api/preview", response_model=PreviewResponse)
@@ -303,14 +312,17 @@ async def get_preset(request: Request, name: str) -> Pattern:
 @app.put("/api/presets/{name}", response_model=Pattern)
 async def put_preset(request: Request, name: str, pattern: Pattern) -> Pattern:
     try:
-        return presets(request).save(name, pattern)
+        saved = presets(request).save(name, pattern)
     except PresetError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    mqtt(request).config_changed()  # HA's effect list
+    return saved
 
 
 @app.delete("/api/presets/{name}")
 async def delete_preset(request: Request, name: str) -> dict:
     presets(request).delete(name)
+    mqtt(request).config_changed()
     return {"ok": True}
 
 
@@ -339,6 +351,7 @@ async def _resync(request: Request, host: str | None = None) -> StrandConfigResu
     straight away whether it answered."""
     handler = manager(request)
     handler.sync()
+    mqtt(request).config_changed()
     if host is None:
         return None
     info = await handler.refresh_one(host)
@@ -361,6 +374,57 @@ async def get_config(request: Request) -> ConfigResponse:
         movie_frames=store.config.movie_frames,
         timeout=store.config.timeout,
     )
+
+
+# ---- home assistant -------------------------------------------------------
+
+
+def _mqtt_settings(request: Request) -> MqttSettings:
+    bridge = mqtt(request)
+    settings = strands(request).config.mqtt
+    if settings is None:
+        return MqttSettings(enabled=False, status=bridge.status, error=bridge.error)
+    return MqttSettings(
+        enabled=settings.enabled,
+        host=settings.host,
+        port=settings.port,
+        username=settings.username,
+        password_set=settings.password is not None,
+        discovery_prefix=settings.discovery_prefix,
+        topic_prefix=settings.topic_prefix,
+        status=bridge.status,
+        error=bridge.error,
+    )
+
+
+@app.get("/api/config/mqtt", response_model=MqttSettings)
+async def get_mqtt(request: Request) -> MqttSettings:
+    return _mqtt_settings(request)
+
+
+@app.put("/api/config/mqtt", response_model=MqttSettings)
+async def put_mqtt(request: Request, payload: MqttUpdate) -> MqttSettings:
+    """Save and reconnect. The reply's status is usually ``connecting``; poll GET."""
+    store = strands(request)
+    current = store.config.mqtt
+    if not payload.enabled and not (payload.host or "").strip():
+        settings = None  # switched off before ever being set up
+    else:
+        password = payload.password
+        if "password" not in payload.model_fields_set:
+            password = current.password if current is not None else None
+        settings = normalize_mqtt(
+            host=payload.host,
+            port=payload.port,
+            username=payload.username,
+            password=password,
+            enabled=payload.enabled,
+            discovery_prefix=payload.discovery_prefix,
+            topic_prefix=payload.topic_prefix,
+        )
+    store.set_mqtt(settings)
+    await mqtt(request).restart()
+    return _mqtt_settings(request)
 
 
 # ---- groups ---------------------------------------------------------------
