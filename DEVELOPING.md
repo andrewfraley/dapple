@@ -21,7 +21,7 @@ scripts/smoke.py  one strand, one pattern, from the command line
 ```bash
 uv venv && uv pip install -e ".[dev]"
 .venv/bin/pre-commit install               # Black and Prettier on every commit
-.venv/bin/python -m pytest                 # 318 tests, no network, no strands
+.venv/bin/python -m pytest                 # 329 tests, no network, no strands
 
 npm --prefix frontend install
 npm --prefix frontend test                 # the JS pattern port vs the Python fixtures

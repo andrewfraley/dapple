@@ -19,7 +19,7 @@ the API reference and internals. Keep them in their lanes — don't put REST tab
 ## Commands
 
 ```bash
-.venv/bin/python -m pytest -q                 # 318 tests, no network, no strands
+.venv/bin/python -m pytest -q                 # 329 tests, no network, no strands
 .venv/bin/pre-commit run --all-files          # Black + Prettier; the git hook runs this on staged files
 npm --prefix frontend test                    # JS pattern port vs Python fixtures
 npm --prefix frontend run build               # required before the Docker build picks up UI changes
@@ -68,8 +68,15 @@ a colliding group can't exist in the first place.
 
 **`ConfigStore` never mutates in place.** Every method builds new `GroupConfig`/list objects
 (`dataclasses.replace`). `_commit` restores the previous group list when the write fails, and an
-in-place mutation anywhere would make that rollback silently useless. `test_a_failed_write_changes_nothing`
-covers every mutation for this reason.
+in-place mutation anywhere would make that rollback silently useless. `DeviceConfig` and
+`GroupConfig` are frozen for this reason; a group's `devices` list isn't, so build a new one.
+`test_a_failed_write_changes_nothing` covers every mutation. `PresetStore` follows the same rule:
+write the new set, then swap it in.
+
+**One thread at a time per strand.** Every public `Device` operation holds the device's lock.
+An upload is five requests, and the MQTT poll, the UI's live reads, `/api/health` and applies all
+reach a strand from worker threads. A new `Device` method that talks to the strand needs
+`@_one_at_a_time` too.
 
 **`Device` knows nothing about its group.** `DeviceManager.sync()` reuses a `Device` when its
 `DeviceConfig` is unchanged, keyed by host across all groups, so moving a strand between groups
@@ -78,7 +85,8 @@ would break that.
 
 **Group control has one code path: `GroupActions` (`app/actions.py`).** The REST routes and the
 MQTT bridge both call it, so an HA command records state and notifies the bridge exactly as a UI
-click does. Don't call `manager.apply_pattern` & co. from a route or from `mqtt.py` directly.
+click does. There's one instance, `app.state.actions`, built in `lifespan` and handed to
+`MqttBridge`. Don't call `manager.apply_pattern` & co. from a route or from `mqtt.py` directly.
 
 **MQTT state is read back from the strands; `state.json` is what Dapple sent.** The poll never
 writes `state.json`. The native Twinkly integration is expected to be running alongside Dapple,
@@ -101,8 +109,12 @@ explicitly. MQTT follows suit: one HA light per group, and "everything off" is H
 or light group). If asked to add a convenience route, `all` is already a reserved group id, and
 the argument for it is power-only (`/api/groups/all/off`), never apply.
 
-Preset names travel in request bodies, never path segments: `Warm white` is a built-in and path
-nesting a user string is an encoding bug waiting to happen.
+The route Home Assistant calls, `POST /api/groups/{id}/preset`, takes the preset name in its
+body: `Warm white` is a built-in, and nesting a user string under a group id is an encoding bug
+waiting to happen in someone's `rest_command`. The preset CRUD routes
+(`/api/presets/{name}`) do put the name in the path. Only the UI calls them, through
+`encodeURIComponent`, and `validate_name` refuses slashes. Keep new preset-applying routes
+body-only.
 
 Group `id` is slugged from the name at creation and is permanent; rename changes `name` only, so
 HA automations survive a rename.
