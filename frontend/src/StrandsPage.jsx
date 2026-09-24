@@ -226,9 +226,7 @@ export default function StrandsPage({ groups: status, onChanged }) {
 
       {config.source && config.source !== 'none' && (
         <Typography variant="caption" color="text.secondary">
-          {config.source === 'TWINKLY_HOSTS'
-            ? 'Loaded from the TWINKLY_HOSTS environment variable — the first change here writes a config file that takes over from it.'
-            : `Saved to ${config.source}`}
+          Saved to {config.source}
         </Typography>
       )}
 
