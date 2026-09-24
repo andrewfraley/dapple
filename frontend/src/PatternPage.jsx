@@ -71,6 +71,10 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
   const [busy, setBusy] = useState(false)
   const [saveOpen, setSaveOpen] = useState(false)
   const [saveName, setSaveName] = useState('')
+  // Indices of the colors whose controls are showing on a phone. Kept here
+  // rather than in SlotRow because rows are keyed by index: moving a color must
+  // carry its open state with it, not leave it behind at the old position.
+  const [openSlots, setOpenSlots] = useState(() => new Set())
 
   const group = groups.find((candidate) => candidate.id === groupId) || null
   const known = Boolean(group && group.segments.length)
@@ -99,6 +103,7 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
     setPattern(current?.state?.pattern ?? STARTING_PATTERN)
     setSelected(current?.state?.preset ?? '')
     setStatus(null)
+    setOpenSlots(new Set())
   }, [groupId, groups])
 
   const run = useCallback(async (label, action) => {
@@ -152,22 +157,37 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
       slots: current.slots.map((existing, i) => (i === index ? slot : existing)),
     }))
 
-  const removeSlot = (index) =>
+  const remapOpen = (map) =>
+    setOpenSlots((current) => new Set([...current].map(map).filter((i) => i !== null)))
+
+  const toggleSlot = (index) =>
+    setOpenSlots((current) => {
+      const next = new Set(current)
+      if (!next.delete(index)) next.add(index)
+      return next
+    })
+
+  const removeSlot = (index) => {
     setPattern((current) => ({
       ...current,
       slots: current.slots.filter((_slot, i) => i !== index),
     }))
+    remapOpen((i) => (i === index ? null : i > index ? i - 1 : i))
+  }
 
-  const moveSlot = (index, delta) =>
+  const moveSlot = (index, delta) => {
+    const target = index + delta
+    if (target < 0 || target >= pattern.slots.length) return
     setPattern((current) => {
       const slots = [...current.slots]
-      const target = index + delta
-      if (target < 0 || target >= slots.length) return current
       ;[slots[index], slots[target]] = [slots[target], slots[index]]
       return { ...current, slots }
     })
+    remapOpen((i) => (i === index ? target : i === target ? index : i))
+  }
 
-  const addSlot = () =>
+  // A color you just added is one you're about to pick, so it arrives open.
+  const addSlot = () => {
     setPattern((current) => ({
       ...current,
       slots: [
@@ -175,6 +195,8 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
         { rgbw: NEW_SLOT_COLORS[current.slots.length % NEW_SLOT_COLORS.length], weight: 20 },
       ],
     }))
+    setOpenSlots((current) => new Set(current).add(pattern.slots.length))
+  }
 
   // ---- actions ------------------------------------------------------------
 
@@ -190,6 +212,7 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
     const preset = presets[selected]
     if (!preset) return
     setPattern({ brightness: 60, ...preset })
+    setOpenSlots(new Set())
     setStatus({ severity: 'info', text: `Loaded “${selected}” — not applied yet` })
   }
 
@@ -298,6 +321,8 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
                 index={index}
                 share={totalWeight ? Math.round((slot.weight / totalWeight) * 100) : 0}
                 hasWhite={hasWhite}
+                open={openSlots.has(index)}
+                onToggle={() => toggleSlot(index)}
                 canRemove={pattern.slots.length > 1}
                 canMoveUp={index > 0}
                 canMoveDown={index < pattern.slots.length - 1}

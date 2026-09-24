@@ -1,15 +1,19 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import Box from '@mui/material/Box'
+import ButtonBase from '@mui/material/ButtonBase'
 import Checkbox from '@mui/material/Checkbox'
+import Collapse from '@mui/material/Collapse'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import IconButton from '@mui/material/IconButton'
 import Slider from '@mui/material/Slider'
 import Stack from '@mui/material/Stack'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
+import useMediaQuery from '@mui/material/useMediaQuery'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 
 import { HUE_STEPS, hueToRgb, lighten, lightness, rgbToHue } from './color.js'
 import { cssColor, rgbToHex } from './pattern.js'
@@ -18,6 +22,8 @@ const RAINBOW = 'linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #
 
 // 44px is the smallest comfortable touch target; MUI's small icon buttons are 34.
 const TOUCH = { minWidth: 44, minHeight: 44 }
+
+const LABEL = { display: 'flex', alignItems: 'center', gap: 1.5, flex: 1, minWidth: 0 }
 
 /**
  * One color in the pattern: a full-strength hue, how much lighter to make it,
@@ -32,6 +38,8 @@ export default function SlotRow({
   index,
   share,
   hasWhite,
+  open,
+  onToggle,
   canRemove,
   canMoveUp,
   canMoveDown,
@@ -54,28 +62,57 @@ export default function SlotRow({
   const hue = explains ? lastHue : (rgbToHue([r, g, b]) ?? lastHue)
   const whiteOnly = hasWhite && r === 0 && g === 0 && b === 0
   const name = `color ${index + 1}`
+  const controlsId = useId()
+  // A few colors' worth of stacked sliders fill a phone screen, so there each
+  // color folds down to its swatch. Wider screens have room to show them all.
+  const collapsible = useMediaQuery((theme) => theme.breakpoints.down('sm'))
+
+  const label = (
+    <>
+      <Box
+        sx={{
+          width: 36,
+          height: 36,
+          borderRadius: '50%',
+          border: 1,
+          borderColor: 'grey.600',
+          backgroundColor: cssColor(slot.rgbw),
+          flexShrink: 0,
+        }}
+        title={hasWhite ? 'How this color will look with its white LED mixed in' : undefined}
+      />
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography variant="body2">Color {index + 1}</Typography>
+        <Typography variant="caption" color="text.secondary">
+          {share}% of the LEDs
+        </Typography>
+      </Box>
+    </>
+  )
 
   return (
     <Box sx={{ py: 1.5, borderBottom: 1, borderColor: 'divider' }}>
       <Stack direction="row" spacing={1.5} alignItems="center">
-        <Box
-          sx={{
-            width: 36,
-            height: 36,
-            borderRadius: '50%',
-            border: 1,
-            borderColor: 'grey.600',
-            backgroundColor: cssColor(slot.rgbw),
-            flexShrink: 0,
-          }}
-          title={hasWhite ? 'How this color will look with its white LED mixed in' : undefined}
-        />
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="body2">Color {index + 1}</Typography>
-          <Typography variant="caption" color="text.secondary">
-            {share}% of the LEDs
-          </Typography>
-        </Box>
+        {collapsible ? (
+          // The whole swatch-and-label area is the toggle, not just the chevron.
+          <ButtonBase
+            onClick={onToggle}
+            aria-expanded={open}
+            aria-controls={controlsId}
+            sx={{ ...LABEL, minHeight: 44, borderRadius: 1, textAlign: 'left' }}
+          >
+            {label}
+            <ExpandMoreIcon
+              sx={{
+                color: 'text.secondary',
+                transition: 'transform 150ms',
+                transform: open ? 'rotate(180deg)' : 'none',
+              }}
+            />
+          </ButtonBase>
+        ) : (
+          <Box sx={LABEL}>{label}</Box>
+        )}
         <Tooltip describeChild title="Move up">
           <span>
             <IconButton
@@ -114,87 +151,89 @@ export default function SlotRow({
         </Tooltip>
       </Stack>
 
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr', md: '2fr 1fr 1fr' },
-          columnGap: 3,
-          rowGap: 0.5,
-          mt: 1,
-          // Keep thumbs clear of the card edge so they stay grabbable at the ends.
-          px: 1,
-        }}
-      >
-        <Box>
-          <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Typography variant="caption">Color</Typography>
-            {hasWhite && (
-              <FormControlLabel
-                sx={{ mr: 0 }}
-                control={
-                  <Checkbox
-                    size="small"
-                    checked={whiteOnly}
-                    onChange={(event) =>
-                      setRgbw(
-                        event.target.checked
-                          ? // White only with the white LED off would be an unlit LED.
-                            [0, 0, 0, w || 255]
-                          : compose(hue, w),
-                      )
-                    }
-                  />
-                }
-                label={<Typography variant="caption">White only</Typography>}
-              />
-            )}
-          </Stack>
-          <Slider
-            value={hue}
-            min={0}
-            max={HUE_STEPS - 1}
-            disabled={whiteOnly}
-            onChange={(_event, value) => {
-              setLastHue(value)
-              setRgbw(compose(value, lift))
-            }}
-            aria-label={`Hue of ${name}`}
-            getAriaValueText={() => rgbToHex(hueToRgb(hue))}
-            sx={{
-              '& .MuiSlider-rail': {
-                background: RAINBOW,
-                opacity: whiteOnly ? 0.3 : 1,
-                height: 10,
-              },
-              '& .MuiSlider-track': { display: 'none' },
-              '& .MuiSlider-thumb': {
-                width: 24,
-                height: 24,
-                backgroundColor: rgbToHex(hueToRgb(hue)),
-                border: 2,
-                borderColor: 'common.white',
-              },
-            }}
+      <Collapse in={!collapsible || open} id={controlsId}>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: '2fr 1fr 1fr' },
+            columnGap: 3,
+            rowGap: 0.5,
+            mt: 1,
+            // Keep thumbs clear of the card edge so they stay grabbable at the ends.
+            px: 1,
+          }}
+        >
+          <Box>
+            <Stack direction="row" justifyContent="space-between" alignItems="center">
+              <Typography variant="caption">Color</Typography>
+              {hasWhite && (
+                <FormControlLabel
+                  sx={{ mr: 0 }}
+                  control={
+                    <Checkbox
+                      size="small"
+                      checked={whiteOnly}
+                      onChange={(event) =>
+                        setRgbw(
+                          event.target.checked
+                            ? // White only with the white LED off would be an unlit LED.
+                              [0, 0, 0, w || 255]
+                            : compose(hue, w),
+                        )
+                      }
+                    />
+                  }
+                  label={<Typography variant="caption">White only</Typography>}
+                />
+              )}
+            </Stack>
+            <Slider
+              value={hue}
+              min={0}
+              max={HUE_STEPS - 1}
+              disabled={whiteOnly}
+              onChange={(_event, value) => {
+                setLastHue(value)
+                setRgbw(compose(value, lift))
+              }}
+              aria-label={`Hue of ${name}`}
+              getAriaValueText={() => rgbToHex(hueToRgb(hue))}
+              sx={{
+                '& .MuiSlider-rail': {
+                  background: RAINBOW,
+                  opacity: whiteOnly ? 0.3 : 1,
+                  height: 10,
+                },
+                '& .MuiSlider-track': { display: 'none' },
+                '& .MuiSlider-thumb': {
+                  width: 24,
+                  height: 24,
+                  backgroundColor: rgbToHex(hueToRgb(hue)),
+                  border: 2,
+                  borderColor: 'common.white',
+                },
+              }}
+            />
+          </Box>
+
+          <LabeledSlider
+            label={hasWhite ? `White — ${w}` : `Lighten — ${lift}`}
+            value={lift}
+            max={255}
+            onChange={(value) => setRgbw(whiteOnly ? [0, 0, 0, value] : compose(hue, value))}
+            ariaLabel={hasWhite ? `White LED of ${name}` : `Lighten ${name}`}
+          />
+
+          <LabeledSlider
+            label={`Share — ${slot.weight}`}
+            value={slot.weight}
+            max={100}
+            step={5}
+            onChange={(value) => onChange({ ...slot, weight: value })}
+            ariaLabel={`Weight of ${name}`}
           />
         </Box>
-
-        <LabeledSlider
-          label={hasWhite ? `White — ${w}` : `Lighten — ${lift}`}
-          value={lift}
-          max={255}
-          onChange={(value) => setRgbw(whiteOnly ? [0, 0, 0, value] : compose(hue, value))}
-          ariaLabel={hasWhite ? `White LED of ${name}` : `Lighten ${name}`}
-        />
-
-        <LabeledSlider
-          label={`Share — ${slot.weight}`}
-          value={slot.weight}
-          max={100}
-          step={5}
-          onChange={(value) => onChange({ ...slot, weight: value })}
-          ariaLabel={`Weight of ${name}`}
-        />
-      </Box>
+      </Collapse>
     </Box>
   )
 }
