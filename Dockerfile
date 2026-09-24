@@ -16,14 +16,14 @@ RUN npm run build
 # uv.lock turned into a plain requirements file with hashes, so the runtime
 # image installs exactly what CI tested and doesn't need uv itself. The lock
 # covers every platform, so this only runs once.
-FROM --platform=$BUILDPLATFORM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9 AS lock
+FROM --platform=$BUILDPLATFORM python:3.14-slim@sha256:caaf356f40667c496d405780745b9ac25771c189a51dfcc42430d531ea09f8a2 AS lock
 
 COPY --from=ghcr.io/astral-sh/uv:0.12.9@sha256:8b940d3a9d65bed080436972241af2e21c84b5e8c9193f7014ed71479ee795ff /uv /bin/uv
 COPY pyproject.toml uv.lock ./
 RUN uv export --frozen --no-emit-project --no-dev -o /requirements.txt
 
 # ---- runtime ---------------------------------------------------------------
-FROM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9
+FROM python:3.14-slim@sha256:caaf356f40667c496d405780745b9ac25771c189a51dfcc42430d531ea09f8a2
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
