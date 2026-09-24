@@ -30,7 +30,10 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
-    versioning-strategy: increase-if-necessary
+    # Every range in pyproject.toml is open-ended (>=), so every new version,
+    # security fixes included, fits without touching it. increase-if-necessary
+    # still raised the lower bounds to the version just locked, which is noise.
+    versioning-strategy: lockfile-only
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
