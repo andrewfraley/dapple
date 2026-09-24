@@ -119,7 +119,7 @@ async def _startup_refresh(app: FastAPI) -> None:
         log.error("Startup refresh failed: %s", exc)
 
 
-app = FastAPI(title="Dapple", version="0.2.1", lifespan=lifespan)
+app = FastAPI(title="Dapple", version="0.2.2", lifespan=lifespan)
 
 
 def manager(request: Request) -> DeviceManager:
