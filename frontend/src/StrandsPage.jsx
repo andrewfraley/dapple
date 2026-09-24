@@ -15,7 +15,7 @@ import StrandDialog from './StrandDialog.jsx'
  * Groups and the strands in them. Everything here writes config.yaml, so the
  * arrangement survives a restart.
  */
-export default function StrandsPage({ groups: status, onChanged }) {
+export default function StrandsPage({ groups: groupStatuses, onChanged }) {
   const [config, setConfig] = useState({
     groups: [],
     writable: true,
@@ -30,7 +30,8 @@ export default function StrandsPage({ groups: status, onChanged }) {
   const [dialogError, setDialogError] = useState(null)
 
   const infoFor = (host) => live.find((device) => device.host === host)
-  const statusFor = (id) => status.find((group) => group.id === id)
+  // What each group is now (LED totals and so on), beside `config`'s editable view of it.
+  const groupStatusFor = (id) => groupStatuses.find((group) => group.id === id)
 
   const load = useCallback(async () => {
     try {
@@ -195,7 +196,7 @@ export default function StrandsPage({ groups: status, onChanged }) {
             key={group.id}
             group={group}
             groups={config.groups}
-            status={statusFor(group.id)}
+            groupStatus={groupStatusFor(group.id)}
             busy={busy}
             canMoveUp={index > 0}
             canMoveDown={index < config.groups.length - 1}
