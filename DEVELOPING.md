@@ -57,6 +57,12 @@ downloads. In a checkout, `docker-compose.override.yml` adds `build: .`, so
 | Host port | — | `DAPPLE_PORT` (override only) | `8080` |
 | Run as uid / gid | — | `PUID` / `PGID` | `1000` |
 | Log timezone | — | `TZ` | `Etc/UTC` |
+| Built UI to serve | — | `DAPPLE_STATIC_DIR` | `static/`, else `frontend/dist/` |
+| API behind `npm run dev` | — | `DAPPLE_API` (Vite only) | `http://localhost:8080` |
+
+Where a setting can come from both, `config.yaml` wins. The Strands and Home Assistant tabs
+rewrite the file, but they only write `movie_frames`, `timeout` and `gamma` back if the file
+already had them, so an env var keeps working until you put the key in the file yourself.
 
 ```yaml
 groups:
@@ -196,6 +202,10 @@ A `Pattern`:
 
 `rgbw` is 0–255 per channel; on an RGBW strand a true white is `[0, 0, 0, 255]`, and saturated
 colors keep `w` at 0. `weight: 0` parks a slot without using it. `brightness` is optional.
+
+Limits: up to 16 slots (the editor offers 8), `weight` 0–1000, `block_size` 1–500, `brightness`
+0–100. The reduced repeating unit (the weights divided by their GCD, summed, times `block_size`
+when blocked) must be at most 100,000 LEDs; anything the editor can build is well under that.
 
 A group from `GET /api/groups`:
 
