@@ -4,21 +4,11 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
-import Dialog from '@mui/material/Dialog'
-import DialogActions from '@mui/material/DialogActions'
-import DialogContent from '@mui/material/DialogContent'
-import DialogTitle from '@mui/material/DialogTitle'
 import Divider from '@mui/material/Divider'
-import FormControl from '@mui/material/FormControl'
 import FormControlLabel from '@mui/material/FormControlLabel'
-import InputLabel from '@mui/material/InputLabel'
-import MenuItem from '@mui/material/MenuItem'
-import Select from '@mui/material/Select'
 import Slider from '@mui/material/Slider'
 import Stack from '@mui/material/Stack'
 import Switch from '@mui/material/Switch'
-import Tab from '@mui/material/Tab'
-import Tabs from '@mui/material/Tabs'
 import TextField from '@mui/material/TextField'
 import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
@@ -26,12 +16,14 @@ import Typography from '@mui/material/Typography'
 import AddIcon from '@mui/icons-material/Add'
 
 import * as api from './api.js'
+import GroupPicker from './GroupPicker.jsx'
+import PresetPicker from './PresetPicker.jsx'
 import PreviewStrip from './PreviewStrip.jsx'
+import SavePresetDialog from './SavePresetDialog.jsx'
 import SlotRow from './SlotRow.jsx'
 
 const MAX_SLOTS = 8
 const FALLBACK_LEDS = 200
-const TABS_UP_TO = 4
 /** How often the strands are re-read while the page is open and visible. */
 const LIVE_POLL_MS = 5000
 /** For a pattern that doesn't say: a preset saved without one, or a new pattern. */
@@ -92,7 +84,6 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
   const [status, setStatus] = useState(null)
   const [busy, setBusy] = useState(false)
   const [saveOpen, setSaveOpen] = useState(false)
-  const [saveName, setSaveName] = useState('')
   // Indices of the colors whose controls are showing on a phone. Kept here
   // rather than in SlotRow because rows are keyed by index: moving a color must
   // carry its open state with it, not leave it behind at the old position.
@@ -315,9 +306,7 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
     loadPresets()
   }
 
-  const onSavePreset = async () => {
-    const name = saveName.trim()
-    if (!name) return
+  const onSavePreset = async (name) => {
     setSaveOpen(false)
     const saved = await run(`Saved “${name}”`, () => api.savePreset(name, pattern))
     if (!saved) return
@@ -341,40 +330,7 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
   return (
     <>
       <Stack spacing={2}>
-        {groups.length > 1 && (
-          <Card variant="outlined">
-            <CardContent sx={{ pb: 1 }}>
-              {groups.length <= TABS_UP_TO ? (
-                <Tabs
-                  value={groupId || false}
-                  onChange={(_event, id) => onSelectGroup(id)}
-                  variant="scrollable"
-                  scrollButtons="auto"
-                >
-                  {groups.map((candidate) => (
-                    <Tab key={candidate.id} value={candidate.id} label={candidate.name} />
-                  ))}
-                </Tabs>
-              ) : (
-                <FormControl size="small" fullWidth>
-                  <InputLabel id="group-label">Group</InputLabel>
-                  <Select
-                    labelId="group-label"
-                    label="Group"
-                    value={groupId || ''}
-                    onChange={(event) => onSelectGroup(event.target.value)}
-                  >
-                    {groups.map((candidate) => (
-                      <MenuItem key={candidate.id} value={candidate.id}>
-                        {candidate.name} — {candidate.total_leds} LEDs
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              )}
-            </CardContent>
-          </Card>
-        )}
+        <GroupPicker groups={groups} groupId={groupId} onSelect={onSelectGroup} />
 
         <Card variant="outlined">
           <CardContent>
@@ -541,14 +497,7 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
                 >
                   {group ? `Apply to ${group.name}` : 'Apply'}
                 </Button>
-                <Button
-                  variant="outlined"
-                  size="large"
-                  onClick={() => {
-                    setSaveName(selected)
-                    setSaveOpen(true)
-                  }}
-                >
+                <Button variant="outlined" size="large" onClick={() => setSaveOpen(true)}>
                   Save as…
                 </Button>
               </Stack>
@@ -560,61 +509,25 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
 
               <Divider />
 
-              <Stack
-                direction={{ xs: 'column', sm: 'row' }}
-                spacing={1.5}
-                alignItems={{ sm: 'center' }}
-              >
-                <FormControl size="small" sx={{ minWidth: 200, flex: 1 }}>
-                  <InputLabel id="preset-label">Preset</InputLabel>
-                  <Select
-                    labelId="preset-label"
-                    label="Preset"
-                    value={selected}
-                    onChange={(event) => setSelected(event.target.value)}
-                  >
-                    {Object.keys(presets)
-                      .sort()
-                      .map((name) => (
-                        <MenuItem key={name} value={name}>
-                          {name}
-                        </MenuItem>
-                      ))}
-                  </Select>
-                </FormControl>
-                <Button onClick={onLoadPreset} disabled={!selected}>
-                  Load
-                </Button>
-                <Button color="error" onClick={onDeletePreset} disabled={!selected || busy}>
-                  Delete
-                </Button>
-              </Stack>
+              <PresetPicker
+                names={Object.keys(presets)}
+                selected={selected}
+                busy={busy}
+                onSelect={setSelected}
+                onLoad={onLoadPreset}
+                onDelete={onDeletePreset}
+              />
             </Stack>
           </CardContent>
         </Card>
       </Stack>
 
-      <Dialog open={saveOpen} onClose={() => setSaveOpen(false)} fullWidth maxWidth="xs">
-        <DialogTitle>Save preset</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            fullWidth
-            margin="dense"
-            label="Name"
-            value={saveName}
-            onChange={(event) => setSaveName(event.target.value)}
-            onKeyDown={(event) => event.key === 'Enter' && onSavePreset()}
-            helperText="An existing name is replaced. Presets work on any group."
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setSaveOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={onSavePreset} disabled={!saveName.trim()}>
-            Save
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <SavePresetDialog
+        open={saveOpen}
+        initialName={selected}
+        onClose={() => setSaveOpen(false)}
+        onSave={onSavePreset}
+      />
     </>
   )
 }
