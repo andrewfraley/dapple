@@ -1,0 +1,6 @@
+# Only in a checkout of the repo; Compose merges it into docker-compose.yml
+# automatically. `docker compose up -d --build` builds this source instead of
+# pulling the published image.
+services:
+  dapple:
+    build: .

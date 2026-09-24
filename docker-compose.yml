@@ -1,9 +1,6 @@
 services:
   dapple:
-    image: andrewfraley/dapple:latest
-    # Compose pulls the published image; `docker compose up -d --build` builds
-    # this checkout instead.
-    build: .
+    image: afraley/dapple:latest
     container_name: dapple
     restart: unless-stopped
     ports:

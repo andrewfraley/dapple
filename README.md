@@ -33,15 +33,21 @@ or your router's device list will have it. It looks like `192.168.1.50`.
 
 ## Setting it up
 
-Open a terminal, then copy and paste these three lines one at a time:
+Open a terminal, then copy and paste these lines one at a time:
 
 ```bash
-git clone https://github.com/andrewfraley/dapple.git
+mkdir -p dapple/data
 cd dapple
+curl -fsSLO https://raw.githubusercontent.com/andrewfraley/dapple/main/docker-compose.yml
 docker compose up -d
 ```
 
-The last one downloads Dapple, which takes a minute the first time. When it finishes, open
+The first two make a `dapple` folder with a `data` folder inside it, where Dapple keeps your
+settings. The third downloads the one file Dapple needs to run,
+[`docker-compose.yml`](docker-compose.yml). If `curl` doesn't work for you, open that link,
+download the file and save it into the `dapple` folder instead.
+
+The last line downloads Dapple itself, which takes a minute the first time. When it finishes, open
 **<http://localhost:8080>** in your browser.
 
 Running it on a different machine from the one you're browsing on? Use that machine's address

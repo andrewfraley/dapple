@@ -19,10 +19,10 @@ the API reference and internals. Keep them in their lanes — don't put REST tab
 ## Commands
 
 ```bash
-.venv/bin/python -m pytest -q                 # 262 tests, no network, no strands
+.venv/bin/python -m pytest -q                 # 260 tests, no network, no strands
 npm --prefix frontend test                    # JS pattern port vs Python fixtures
 npm --prefix frontend run build               # required before the Docker build picks up UI changes
-docker compose up -d --build                  # runs on :8081 here (DAPPLE_PORT in .env)
+docker compose up -d --build                  # builds this tree via docker-compose.override.yml; :8081 here
 docker compose logs --no-log-prefix | tail -40
 .venv/bin/python scripts/smoke.py <ip>        # talk to one strand, bypassing the web app
 ```
@@ -132,5 +132,8 @@ This repo is open source; `data/` and `.env` are the only places real details ma
 - Startup refreshes devices in a background task so unreachable strands don't block boot.
 - `data/` is bind-mounted and owned by the host user; the compose file runs the container as
   uid 1000 via `DAPPLE_UID`/`DAPPLE_GID`.
-- The repo is public on GitHub (`andrewfraley/dapple`). Check `git status` before committing:
+- The repo is public on GitHub (`andrewfraley/dapple`); the image is `afraley/dapple` on Docker Hub,
+  published by `.github/workflows/docker.yml`. `docker-compose.yml` must stay usable on its own
+  (users download only that file), so anything that needs the source goes in the override.
+  Check `git status` before committing:
   `data/`, `.env`, `frontend/dist/` and `*.egg-info/` must stay untracked.

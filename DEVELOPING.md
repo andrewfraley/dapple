@@ -18,7 +18,7 @@ scripts/smoke.py  one strand, one pattern, from the command line
 
 ```bash
 uv venv && uv pip install -e ".[dev]"
-.venv/bin/python -m pytest                 # 262 tests, no network, no strands
+.venv/bin/python -m pytest                 # 260 tests, no network, no strands
 
 npm --prefix frontend install
 npm --prefix frontend test                 # the JS pattern port vs the Python fixtures
@@ -29,6 +29,10 @@ DAPPLE_DATA_DIR=./data .venv/bin/uvicorn app.main:app --reload --port 8080
 
 The API serves the built UI from `static/` (where the Docker image puts it) or `frontend/dist/`,
 whichever exists. With neither, `/` explains what to build and `/docs` still works.
+
+`docker-compose.yml` pulls the published image, because that one file is all an end user
+downloads. In a checkout, `docker-compose.override.yml` adds `build: .`, so
+`docker compose up -d --build` runs your working tree instead.
 
 ## Configuration
 
