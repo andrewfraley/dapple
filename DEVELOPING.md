@@ -67,9 +67,10 @@ groups:
         host: 192.168.40.21
       - name: TreeBottom
         host: 192.168.40.22
-        # Read from the strand unless pinned here. The strand is the authority:
-        # the frame we upload must be exactly as long as it expects, so a count
-        # that disagrees breaks the upload rather than fixing anything.
+        # Read from the strand unless pinned here. Pin them only for a strand
+        # that misreports, or to build patterns before the strands are on the
+        # network: the frame we upload is exactly this long, and a strand may
+        # refuse one that doesn't match what it expects.
         # number_of_led: 250
         # led_profile: RGBW
 ```
@@ -326,7 +327,8 @@ orange reading as green is byte order.
 `mode: movie` and brightness isn't 0.
 
 **Only part of a run lights up** — the strand under-reports `number_of_led`. Pin the real count
-in `config.yaml`.
+in `config.yaml`. If uploads start failing after that, the firmware won't take a frame of that
+length, and the pin has to go.
 
 **The pattern restarts at the second strand** — they're in different groups, in the wrong order
 within their group, or one reports the wrong LED count. `GET /api/groups` shows the offsets in

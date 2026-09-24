@@ -202,7 +202,8 @@ The two strands are either in different groups, or in the wrong order within the
 
 **Only part of a run lights up.**
 The strand is under-reporting how many lights it has. The Strands tab shows the number it
-reported — if that's wrong, it can be corrected by hand in `data/config.yaml`.
+reported — if that's wrong, it can be corrected by hand in `data/config.yaml`. If patterns then
+stop reaching the strand at all, it won't accept that number: take the correction back out.
 
 **"The config file can't be written."**
 Dapple can't save to its `data` folder. On Linux, run `id -u` and `id -g`, open
