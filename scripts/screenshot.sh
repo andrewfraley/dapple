@@ -59,7 +59,7 @@ DAPPLE_DATA_DIR=$data .venv/bin/python -m uvicorn --app-dir scripts screenshot_a
   --port "$port" >"$data/server.log" 2>&1 &
 server=$!
 for _ in $(seq 50); do
-  curl -sf "http://127.0.0.1:$port/api/health" >/dev/null && break
+  curl -sf "http://127.0.0.1:$port/api/ping" >/dev/null && break
   sleep 0.2
 done
 
