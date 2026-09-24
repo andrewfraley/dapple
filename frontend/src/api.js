@@ -7,7 +7,14 @@ async function request(path, options = {}) {
     ...options,
   })
   const text = await response.text()
-  const body = text ? JSON.parse(text) : null
+  let body = null
+  try {
+    body = text ? JSON.parse(text) : null
+  } catch {
+    // A reverse proxy's HTML error page, say. Say which status it was rather
+    // than surfacing a JSON syntax error.
+    if (response.ok) throw new Error(`Unexpected response from ${path}`)
+  }
   if (!response.ok) {
     const detail = body?.detail
     if (!detail) throw new Error(`HTTP ${response.status}`)
@@ -24,8 +31,7 @@ export const getConfig = () => request('/api/config')
 // ---- groups: what each one is showing, and changing it ---------------------
 
 export const getGroups = () => request('/api/groups')
-export const getGroup = (id) => request(`/api/groups/${encodeURIComponent(id)}`)
-// Read from the strands, so it notices changes made outside Dapple; slower than getGroup.
+// Read from the strands, so it notices changes made outside Dapple; slower than getGroups.
 export const getGroupLive = (id) => request(`/api/groups/${encodeURIComponent(id)}/live`)
 
 export const applyToGroup = (id, pattern) =>

@@ -79,6 +79,9 @@ The last line downloads Dapple itself, which takes a minute the first time. When
 Running it on a different machine from the one you're browsing on? Use that machine's address
 instead of `localhost` — for example `http://192.168.1.10:8080`.
 
+Dapple has no login. Anyone who can open that page can change your lights and your Home
+Assistant connection, so keep it on your home network and don't open the port on your router.
+
 > **If the page doesn't load**, something else on that computer may already be using port 8080.
 > Open `docker-compose.yml` in a text editor, change `8080:8080` to `8081:8080`, run
 > `docker compose up -d` again, and use `:8081` in the address instead.
@@ -146,8 +149,9 @@ nothing to pick).
   how many lights each run gets.
 - **Brightness** — takes effect as soon as you let go of the slider.
 
-The bar at the top shows what you're about to get, updating as you change things. If a group has
-two strands, a thin line marks where one ends and the next begins.
+The preview at the top shows what you're about to get, one dot per light, updating as you change
+things. If a group has more than one strand, each gets its own block with its name above it; the
+pattern still runs on from one block into the next, just as it will on the lights.
 
 When it looks right, click **Apply**. Nothing reaches the lights until you do.
 
@@ -188,13 +192,13 @@ the two devices are probably on different networks — a "guest" Wi-Fi network i
 
 **The colors look wrong — orange comes out yellow, or everything looks washed out.**
 Dapple corrects for the difference between screen colors and LED colors, but the right amount
-varies. Open `data/config.yaml` in a text editor and change the last line to `gamma: 2.8` for
+varies. Open `data/config.yaml` in a text editor and add a line `gamma: 2.8` at the end for
 deeper, richer colors (or `gamma: 1.0` to turn the correction off entirely), then run
-`docker compose restart`.
+`docker compose restart`. If there's a `gamma:` line already, change that one instead.
 
 **A pattern applies with no errors but the lights stay dark.**
-A few strands refuse a pattern sent the normal way. In `data/config.yaml`, change
-`movie_frames: 1` to `movie_frames: 2` and run `docker compose restart`.
+A few strands refuse a pattern sent the normal way. Add a line `movie_frames: 2` at the end of
+`data/config.yaml` and run `docker compose restart`.
 
 **The pattern restarts partway along a run of lights.**
 The two strands are either in different groups, or in the wrong order within their group. See
@@ -202,7 +206,8 @@ The two strands are either in different groups, or in the wrong order within the
 
 **Only part of a run lights up.**
 The strand is under-reporting how many lights it has. The Strands tab shows the number it
-reported — if that's wrong, it can be corrected by hand in `data/config.yaml`.
+reported — if that's wrong, it can be corrected by hand in `data/config.yaml`. If patterns then
+stop reaching the strand at all, it won't accept that number: take the correction back out.
 
 **"The config file can't be written."**
 Dapple can't save to its `data` folder. On Linux, run `id -u` and `id -g`, open
@@ -223,7 +228,7 @@ Everything Dapple remembers lives in the `data` folder next to `docker-compose.y
 |---|---|
 | `config.yaml` | your strands, their addresses, which group each is in, and your Home Assistant connection (including its password, so keep the folder private) |
 | `presets.json` | your saved patterns |
-| `state.json` | what each group is currently showing |
+| `state.json` | the pattern Dapple last sent to each group (the lights may have been changed since, from the Twinkly app) |
 
 Back up that folder and you've backed up everything. It's all plain text, so you can read and
 edit it if you want to.

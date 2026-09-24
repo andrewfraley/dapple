@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
+from importlib.metadata import version
 from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Request
@@ -19,6 +20,7 @@ from app.config import (
     ConfigStorageError,
     ConfigStore,
     UnknownGroupError,
+    UnknownStrandError,
     load_config,
     normalize_device,
     normalize_mqtt,
@@ -91,14 +93,15 @@ async def lifespan(app: FastAPI):
         app.state.presets = PresetStore(config.presets_path)
     if not hasattr(app.state, "group_state"):
         app.state.group_state = StateStore(config.state_path)
-    if not hasattr(app.state, "mqtt"):
-        app.state.mqtt = MqttBridge(
-            app.state.strands,
-            app.state.presets,
-            app.state.group_state,
-            app.state.manager,
-            version=app.version,
+    if not hasattr(app.state, "actions"):
+        app.state.actions = GroupActions(
+            app.state.manager, app.state.presets, app.state.group_state
         )
+    if not hasattr(app.state, "mqtt"):
+        app.state.mqtt = MqttBridge(app.state.strands, app.state.actions, version=app.version)
+    # Set here rather than at construction: the bridge needs the actions, and
+    # the actions need to tell the bridge.
+    app.state.actions.on_change = app.state.mqtt.group_changed
     if not app.state.presets.writable:
         log.warning("%s is not writable; presets cannot be saved", config.presets_path)
     log.info(
@@ -110,10 +113,12 @@ async def lifespan(app: FastAPI):
         )
         or "none",
     )
-    # Strands that are simply switched off shouldn't hold up startup.
-    asyncio.create_task(_startup_refresh(app))
+    # Strands that are simply switched off shouldn't hold up startup. The
+    # reference is kept so the task can't be garbage-collected mid-run.
+    startup = asyncio.create_task(_startup_refresh(app))
     app.state.mqtt.start()
     yield
+    startup.cancel()
     await app.state.mqtt.stop()
 
 
@@ -135,7 +140,9 @@ async def _startup_refresh(app: FastAPI) -> None:
         log.error("Startup refresh failed: %s", exc)
 
 
-app = FastAPI(title="Dapple", version="0.3.0", lifespan=lifespan)
+# pyproject.toml is the one place the version is written; the image and a dev
+# checkout both install the package, so its metadata is always there.
+app = FastAPI(title="Dapple", version=version("dapple"), lifespan=lifespan)
 
 
 def manager(request: Request) -> DeviceManager:
@@ -159,12 +166,7 @@ def mqtt(request: Request) -> MqttBridge:
 
 
 def actions(request: Request) -> GroupActions:
-    return GroupActions(
-        manager(request),
-        presets(request),
-        group_state(request),
-        on_change=mqtt(request).group_changed,
-    )
+    return request.app.state.actions
 
 
 @app.exception_handler(PresetError)
@@ -178,7 +180,8 @@ async def preset_storage_error_handler(_request: Request, exc: PresetStorageErro
 
 
 @app.exception_handler(UnknownGroupError)
-async def unknown_group_handler(_request: Request, exc: UnknownGroupError) -> JSONResponse:
+@app.exception_handler(UnknownStrandError)
+async def unknown_target_handler(_request: Request, exc: ConfigError) -> JSONResponse:
     return JSONResponse(status_code=404, content={"detail": str(exc)})
 
 
@@ -204,8 +207,18 @@ def _response(results) -> ApplyResponse:
 # ---- status ---------------------------------------------------------------
 
 
+@app.get("/api/ping")
+async def ping() -> dict:
+    """Liveness only, for the container HEALTHCHECK. It never touches a strand:
+    polling them every 30s would be traffic for nothing, and an unplugged strand
+    isn't a reason to restart Dapple."""
+    return {"ok": True}
+
+
 @app.get("/api/health", response_model=HealthResponse)
 async def health(request: Request) -> HealthResponse:
+    """Asks every strand, so it's slow when one is down. ``ok`` is false then,
+    but the status is still 200: Dapple itself is fine."""
     results = await manager(request).health()
     return HealthResponse(ok=all(result.ok for result in results), devices=results)
 
@@ -228,15 +241,7 @@ def _group_status(request: Request, group) -> GroupStatus:
     return GroupStatus(
         id=group.id,
         name=group.name,
-        strands=[
-            StrandConfig(
-                name=device.config.name,
-                host=device.config.host,
-                number_of_led=device.config.number_of_led,
-                led_profile=device.config.led_profile,
-            )
-            for device in group.devices
-        ],
+        strands=[_as_model(device.config) for device in group.devices],
         total_leds=group.total_leds(),
         segments=group.segments(),
         reachable=group.reachable(),
@@ -301,8 +306,8 @@ async def turn_group_off(request: Request, group_id: str) -> ApplyResponse:
 
 @app.post("/api/preview", response_model=PreviewResponse)
 async def preview(payload: PreviewRequest) -> PreviewResponse:
-    """The pattern as LED colors. The UI computes this itself; this endpoint is
-    the reference the JS port is tested against."""
+    """The pattern as LED colors, for scripts. The UI computes this itself in
+    frontend/src/pattern.js, kept in step by tests/test_pattern_parity.py."""
     return PreviewResponse(leds=led_colors(payload.pattern, payload.num_leds, payload.offset))
 
 

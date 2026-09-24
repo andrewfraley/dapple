@@ -5,6 +5,8 @@ rather than pulling in pytest-asyncio for four cases.
 """
 
 import asyncio
+import threading
+import time
 
 import pytest
 from xled.exceptions import ApplicationError, TokenExpiredError
@@ -360,12 +362,53 @@ def test_segments_are_group_relative():
     assert [(s.offset, s.number_of_led) for s in segments] == [(0, 80), (80, 90)]
 
 
-def test_a_strand_that_has_not_answered_does_not_shift_its_neighbours():
+def test_a_strand_that_has_not_answered_counts_as_zero_leds():
     manager = make_manager([105, 100])
     manager.groups[0].devices[0].number_of_led = None
 
     assert manager.groups[0].offsets() == [0, 0]
     assert [s.host for s in manager.groups[0].segments()] == ["10.0.0.1"]
+
+
+def test_a_first_strand_unplugged_at_boot_is_read_before_the_offsets_are():
+    """Strand 1 was unreachable at startup, so it has no LED count. If the
+    offsets were taken before it was read, strand 2 would start at 0 and the
+    pattern would restart at the join. 103 + 100 so the two phases differ."""
+    manager = make_manager([103, 100])
+    first = manager.groups[0].devices[0]
+    first.number_of_led, first.reachable = None, False
+
+    asyncio.run(manager.apply_pattern("g0", PATTERN))
+
+    top, bottom = frames_of(manager.groups[0])
+    assert bottom != build_frame(PATTERN, 100, "RGBW"), "lengths must not hide a restart"
+    assert top + bottom == build_frame(PATTERN, 203, "RGBW")
+
+
+def test_one_strand_never_runs_two_operations_at_once():
+    """An upload is several requests; another thread's must not land between them."""
+
+    class SlowControl(FakeControl):
+        def set_movies_new(self, *args):
+            time.sleep(0.05)
+            return super().set_movies_new(*args)
+
+    control = SlowControl()
+    device = make_device(control)
+    device.refresh()
+    control.calls.clear()
+
+    threads = [threading.Thread(target=device.apply_frame, args=(b"x" * 420,)) for _ in range(2)]
+    threads.append(threading.Thread(target=device.info, kwargs={"with_live_state": True}))
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    upload = ["delete_movies", "set_movies_new", "set_movies_full", "set_movies_current"]
+    sequence = names(control)
+    starts = [i for i in range(len(sequence)) if sequence[i : i + len(upload)] == upload]
+    assert len(starts) == 2, sequence
 
 
 def test_apply_is_continuous_within_a_group():

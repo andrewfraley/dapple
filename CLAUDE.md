@@ -19,7 +19,7 @@ the API reference and internals. Keep them in their lanes — don't put REST tab
 ## Commands
 
 ```bash
-.venv/bin/python -m pytest -q                 # 318 tests, no network, no strands
+.venv/bin/python -m pytest -q                 # 329 tests, no network, no strands
 .venv/bin/pre-commit run --all-files          # Black + Prettier; the git hook runs this on staged files
 npm --prefix frontend test                    # JS pattern port vs Python fixtures
 npm --prefix frontend run build               # required before the Docker build picks up UI changes
@@ -68,8 +68,15 @@ a colliding group can't exist in the first place.
 
 **`ConfigStore` never mutates in place.** Every method builds new `GroupConfig`/list objects
 (`dataclasses.replace`). `_commit` restores the previous group list when the write fails, and an
-in-place mutation anywhere would make that rollback silently useless. `test_a_failed_write_changes_nothing`
-covers every mutation for this reason.
+in-place mutation anywhere would make that rollback silently useless. `DeviceConfig` and
+`GroupConfig` are frozen for this reason; a group's `devices` list isn't, so build a new one.
+`test_a_failed_write_changes_nothing` covers every mutation. `PresetStore` follows the same rule:
+write the new set, then swap it in.
+
+**One thread at a time per strand.** Every public `Device` operation holds the device's lock.
+An upload is five requests, and the MQTT poll, the UI's live reads, `/api/health` and applies all
+reach a strand from worker threads. A new `Device` method that talks to the strand needs
+`@_one_at_a_time` too.
 
 **`Device` knows nothing about its group.** `DeviceManager.sync()` reuses a `Device` when its
 `DeviceConfig` is unchanged, keyed by host across all groups, so moving a strand between groups
@@ -78,7 +85,8 @@ would break that.
 
 **Group control has one code path: `GroupActions` (`app/actions.py`).** The REST routes and the
 MQTT bridge both call it, so an HA command records state and notifies the bridge exactly as a UI
-click does. Don't call `manager.apply_pattern` & co. from a route or from `mqtt.py` directly.
+click does. There's one instance, `app.state.actions`, built in `lifespan` and handed to
+`MqttBridge`. Don't call `manager.apply_pattern` & co. from a route or from `mqtt.py` directly.
 
 **MQTT state is read back from the strands; `state.json` is what Dapple sent.** The poll never
 writes `state.json`. The native Twinkly integration is expected to be running alongside Dapple,
@@ -101,8 +109,12 @@ explicitly. MQTT follows suit: one HA light per group, and "everything off" is H
 or light group). If asked to add a convenience route, `all` is already a reserved group id, and
 the argument for it is power-only (`/api/groups/all/off`), never apply.
 
-Preset names travel in request bodies, never path segments: `Warm white` is a built-in and path
-nesting a user string is an encoding bug waiting to happen.
+The route Home Assistant calls, `POST /api/groups/{id}/preset`, takes the preset name in its
+body: `Warm white` is a built-in, and nesting a user string under a group id is an encoding bug
+waiting to happen in someone's `rest_command`. The preset CRUD routes
+(`/api/presets/{name}`) do put the name in the path. Only the UI calls them, through
+`encodeURIComponent`, and `validate_name` refuses slashes. Keep new preset-applying routes
+body-only.
 
 Group `id` is slugged from the name at creation and is permanent; rename changes `name` only, so
 HA automations survive a rename.
@@ -143,6 +155,21 @@ This repo is open source; `data/` and `.env` are the only places real details ma
   `grep -rnIE '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b' --exclude-dir={node_modules,.venv,dist,data} .`
   Anything outside `127.0.0.1`, `0.0.0.0` and the example addresses above needs a reason.
 
+## Branches, pull requests and releases
+
+- Work on a branch, never on `main`. Commit each logical change on its own. Push the branch and
+  open a pull request with `gh pr create`.
+- **Never merge a PR, push to `main`, or create a tag or GitHub release.** A person merges.
+  Your job ends when the PR is open and its CI is green; then wait for them.
+- Merging to `main` is what releases. If `pyproject.toml` has a version with no `v<version>` tag,
+  the `main` build publishes that image version, tags the commit and creates the GitHub release
+  from `docs/releases/<version>.md`. So a release is just a PR that bumps the version in
+  `pyproject.toml` and `frontend/package.json`, refreshes both lock files (`uv lock`, and
+  `npm --prefix frontend install --package-lock-only`) and adds the notes file. DEVELOPING.md's
+  *Releases* section has the details.
+- Release notes are for people running Dapple, in the voice of README.md: what changed for them
+  and how to upgrade. They're not a commit log. See `docs/releases/` for the shape.
+
 ## Gotchas
 
 - `xled` sets no request timeout. `Device._apply_timeout` patches the session's `send`, not
@@ -156,8 +183,8 @@ This repo is open source; `data/` and `.env` are the only places real details ma
   homelab users already know; only the override reads `DAPPLE_PORT`.
 - The repo is public on GitHub (`andrewfraley/dapple`); the image is `afraley/dapple` on Docker Hub,
   published by `.github/workflows/docker.yml`. Every branch push publishes
-  `afraley/dapple:<branch>` for testing on the real strands; only main moves `latest`, and only
-  `v*` tags make versions. `docker-compose.yml` must stay usable on its own (users download only
-  that file), so anything that needs the source goes in the override.
+  `afraley/dapple:<branch>` for testing on the real strands; only main moves `latest`.
+  `docker-compose.yml` must stay usable on its own (users download only that file), so anything
+  that needs the source goes in the override.
   Check `git status` before committing:
   `data/`, `.env`, `frontend/dist/` and `*.egg-info/` must stay untracked.

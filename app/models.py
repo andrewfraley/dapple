@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime
+from functools import reduce
+from math import gcd
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 Channel = Annotated[int, Field(ge=0, le=255)]
 Rgbw = tuple[Channel, Channel, Channel, Channel]
@@ -14,6 +16,14 @@ Layout = Literal["interleaved", "blocked"]
 LedProfile = Literal["RGB", "RGBW"]
 
 MAX_SLOTS = 16
+#: Longest strand, group or preset name.
+MAX_NAME = 64
+#: Most LEDs on one strand — far past any Twinkly, but it bounds a frame's size.
+MAX_LEDS = 20000
+#: Longest repeating unit a pattern may have. The builders materialise one unit
+#: as a list; 16 coprime weights of 1000 in 500-LED blocks would be 8M entries.
+#: The editor's own limits (8 colors, shares to 100, blocks to 500) stay under it.
+MAX_UNIT = 100_000
 
 
 class Slot(BaseModel):
@@ -34,6 +44,21 @@ class Pattern(BaseModel):
     layout: Layout = "interleaved"
     block_size: Annotated[int, Field(ge=1, le=500)] = 1
     brightness: Annotated[int, Field(ge=0, le=100)] | None = None
+
+    @model_validator(mode="after")
+    def _unit_fits(self) -> "Pattern":
+        weights = [slot.weight for slot in self.slots if slot.weight > 0]
+        divisor = reduce(gcd, weights, 0) or 1
+        unit = sum(weights) // divisor
+        if self.layout == "blocked":
+            unit *= self.block_size
+        if unit > MAX_UNIT:
+            raise ValueError(
+                f"This pattern repeats only every {unit} LEDs (the limit is {MAX_UNIT}). "
+                "Use a smaller block size, or shares with a common factor, like 80/20 "
+                "rather than 79/21."
+            )
+        return self
 
 
 class DeviceInfo(BaseModel):
@@ -75,7 +100,7 @@ class PreviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     pattern: Pattern
-    num_leds: Annotated[int, Field(ge=0, le=20000)]
+    num_leds: Annotated[int, Field(ge=0, le=MAX_LEDS)]
     offset: Annotated[int, Field(ge=0)] = 0
 
 
@@ -98,9 +123,9 @@ class StrandConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    name: Annotated[str, Field(max_length=64)] = ""
+    name: Annotated[str, Field(max_length=MAX_NAME)] = ""
     host: Annotated[str, Field(min_length=1, max_length=255)]
-    number_of_led: Annotated[int, Field(ge=1, le=20000)] | None = None
+    number_of_led: Annotated[int, Field(ge=1, le=MAX_LEDS)] | None = None
     led_profile: LedProfile | None = None
 
 
@@ -189,7 +214,7 @@ class GroupStatus(BaseModel):
 class GroupCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    name: Annotated[str, Field(min_length=1, max_length=64)]
+    name: Annotated[str, Field(min_length=1, max_length=MAX_NAME)]
 
 
 class GroupRename(GroupCreate):
@@ -215,7 +240,7 @@ class ApplyPresetRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     #: Preset names contain spaces, so they travel in the body, not the path.
-    name: Annotated[str, Field(min_length=1, max_length=64)]
+    name: Annotated[str, Field(min_length=1, max_length=MAX_NAME)]
 
 
 class ConfigResponse(BaseModel):

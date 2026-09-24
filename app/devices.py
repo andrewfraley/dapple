@@ -11,8 +11,10 @@ sum *within* a group, so every group starts its pattern at its own first LED.
 from __future__ import annotations
 
 import asyncio
+import functools
 import io
 import logging
+import threading
 import uuid
 from typing import Any, Callable, Sequence, TypeVar
 
@@ -23,8 +25,8 @@ from xled.exceptions import (
     TokenExpiredError,
 )
 
-from app.config import AppConfig, DeviceConfig, UnknownGroupError
-from app.models import DeviceInfo, DeviceResult, Pattern, StrandSegment
+from app.config import AppConfig, DeviceConfig, UnknownGroupError, UnknownStrandError
+from app.models import DeviceInfo, DeviceResult, LedProfile, Pattern, StrandSegment
 from app.pattern import DEFAULT_GAMMA, build_frame
 
 log = logging.getLogger(__name__)
@@ -39,6 +41,11 @@ MOVIE_NAME = "dapple"
 FRAME_DELAY_MS = 1000
 
 
+def _known_profile(profile: str | None) -> LedProfile | None:
+    """The profile if it's one we can pack for, else None."""
+    return profile if profile in ("RGB", "RGBW") else None
+
+
 def _get(response: Any, key: str, default: Any = None) -> Any:
     """Read a key out of an xled ApplicationResponse without assuming it exists."""
     try:
@@ -49,6 +56,23 @@ def _get(response: Any, key: str, default: Any = None) -> Any:
 
 class DeviceError(Exception):
     """Anything that stopped us from talking to a strand."""
+
+
+def _one_at_a_time(method: Callable[..., T]) -> Callable[..., T]:
+    """Hold the strand's lock for the whole of ``method``.
+
+    Applies, the MQTT poll, the UI's live reads and the health check all reach a
+    strand from worker threads. An upload is several requests in a row (off,
+    delete, new, full, current); another thread's request, or its re-login,
+    landing in the middle can break the upload or leave the strand dark.
+    """
+
+    @functools.wraps(method)
+    def locked(self: "Device", *args, **kwargs):
+        with self._lock:
+            return method(self, *args, **kwargs)
+
+    return locked
 
 
 class Device:
@@ -74,6 +98,8 @@ class Device:
         self.fw_family: str | None = None
         self.reachable = False
         self.error: str | None = None
+        # Reentrant: apply_frame refreshes through ensure_ready, and refresh ends in info.
+        self._lock = threading.RLock()
 
     # ---- plumbing ----------------------------------------------------------
 
@@ -134,6 +160,7 @@ class Device:
 
     # ---- state -------------------------------------------------------------
 
+    @_one_at_a_time
     def refresh(self) -> DeviceInfo:
         """Re-read gestalt and firmware version, and cache them."""
         try:
@@ -158,6 +185,7 @@ class Device:
         self.error = None
         return self.info()
 
+    @_one_at_a_time
     def ensure_ready(self) -> None:
         if not self.reachable or not self.number_of_led:
             self.refresh()
@@ -166,8 +194,8 @@ class Device:
         if not self.number_of_led:
             raise DeviceError("device did not report number_of_led")
 
+    @_one_at_a_time
     def info(self, with_live_state: bool = False) -> DeviceInfo:
-        profile = self.led_profile if self.led_profile in ("RGB", "RGBW") else None
         mode = brightness = None
         if with_live_state and self.reachable:
             try:
@@ -180,7 +208,7 @@ class Device:
             host=self.host,
             reachable=self.reachable,
             number_of_led=self.number_of_led,
-            led_profile=profile,
+            led_profile=_known_profile(self.led_profile),
             fw_version=self.fw_version,
             fw_family=self.fw_family,
             mode=mode,
@@ -203,6 +231,7 @@ class Device:
 
     # ---- operations --------------------------------------------------------
 
+    @_one_at_a_time
     def apply_frame(self, frame: bytes) -> None:
         """Upload ``frame`` as a movie and switch the strand to it.
 
@@ -246,12 +275,15 @@ class Device:
         if movie_id is not None:
             self._call(lambda: self.control.set_movies_current(movie_id))
 
+    @_one_at_a_time
     def set_brightness(self, value: int) -> None:
         self._call(lambda: self.control.set_brightness(value))
 
+    @_one_at_a_time
     def turn_on(self) -> None:
         self._call(lambda: self.control.set_mode("movie"))
 
+    @_one_at_a_time
     def turn_off(self) -> None:
         self._call(lambda: self.control.set_mode("off"))
 
@@ -272,9 +304,9 @@ class DeviceGroup:
     def offsets(self) -> list[int]:
         """LEDs before each strand, counting only within this group.
 
-        A strand that hasn't answered yet counts as 0 rather than being skipped,
-        so an unreachable strand doesn't shift the ones after it once it comes
-        back.
+        A strand whose LED count isn't known counts as 0, which shifts every
+        strand after it. :meth:`DeviceManager.apply_pattern` reads unknown strands
+        before asking, so this only happens while one is genuinely unreachable.
         """
         offsets, running = [], 0
         for device in self.devices:
@@ -296,7 +328,7 @@ class DeviceGroup:
                 host=device.host,
                 offset=offset,
                 number_of_led=device.number_of_led or 0,
-                led_profile=device.led_profile if device.led_profile in ("RGB", "RGBW") else "RGB",
+                led_profile=_known_profile(device.led_profile) or "RGB",
             )
             for device, offset in zip(self.devices, self.offsets())
             if device.number_of_led
@@ -367,7 +399,7 @@ class DeviceManager:
         for device in self.devices:
             if device.host == host:
                 return device
-        raise DeviceError(f"No strand configured at {host!r}")
+        raise UnknownStrandError(f"No strand configured at {host!r}")
 
     async def refresh_one(self, host: str) -> DeviceInfo:
         device = self.get(host)
@@ -448,6 +480,12 @@ class DeviceManager:
 
     async def apply_pattern(self, group_id: str, pattern: Pattern) -> list[DeviceResult]:
         group = self.group(group_id)
+        # A strand that was unplugged at boot has no LED count yet, and would
+        # count as 0 — every strand after it would restart the pattern. Read
+        # those first.
+        unread = [device for device in group.devices if not device.number_of_led]
+        if unread:
+            await asyncio.gather(*(asyncio.to_thread(device.refresh) for device in unread))
         # Offsets are read here rather than inside the operation so every strand
         # in the group is placed against the same snapshot of LED counts.
         offsets = dict(zip((d.host for d in group.devices), group.offsets()))

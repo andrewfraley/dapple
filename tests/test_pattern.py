@@ -244,3 +244,23 @@ def test_two_strands_join_seamlessly_blocked():
 def test_offset_larger_than_the_unit_wraps():
     single = pattern((ORANGE, 1), (PURPLE, 1))
     assert led_colors(single, 4, offset=2) == led_colors(single, 4, offset=0)
+
+
+def test_a_pattern_whose_repeating_unit_is_absurdly_long_is_refused():
+    """Blocked with coprime weights would build one unit of millions of LEDs."""
+    primes = [997, 991, 983, 977, 971, 967, 953, 947, 941, 937, 929, 919, 911, 907, 887, 883]
+    slots = [Slot(rgbw=(255, 0, 0, 0), weight=w) for w in primes]
+
+    with pytest.raises(ValueError, match="repeats only every"):
+        Pattern(slots=slots, layout="blocked", block_size=500)
+    Pattern(slots=slots)  # interleaved, the same shares: 15,000 LEDs is fine
+
+
+def test_the_editors_largest_pattern_is_accepted():
+    """8 colors, shares up to 100 in steps of 5, blocks up to 500."""
+    shares = [100, 95, 90, 85, 80, 75, 70, 65]
+    Pattern(
+        slots=[Slot(rgbw=(255, 0, 0, 0), weight=w) for w in shares],
+        layout="blocked",
+        block_size=500,
+    )

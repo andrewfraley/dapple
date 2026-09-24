@@ -77,7 +77,7 @@ function StatusCell({ info }) {
 export default function GroupSection({
   group,
   groups,
-  status,
+  groupStatus,
   busy,
   canMoveUp,
   canMoveDown,
@@ -93,7 +93,7 @@ export default function GroupSection({
 }) {
   const strands = group.strands
   const others = groups.filter((candidate) => candidate.id !== group.id)
-  const totalLeds = status?.total_leds ?? 0
+  const totalLeds = groupStatus?.total_leds ?? 0
 
   return (
     <Card variant="outlined">

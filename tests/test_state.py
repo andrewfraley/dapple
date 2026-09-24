@@ -27,7 +27,6 @@ def a_pattern(brightness=60):
 
 
 def test_a_fresh_store_knows_nothing(store):
-    assert store.all() == {}
     assert store.get("tree") is None
 
 
@@ -153,7 +152,7 @@ def test_an_unreadable_file_does_not_crash(tmp_path):
     path = tmp_path / "state.json"
     path.write_text("{ not json")
 
-    assert StateStore(path).all() == {}
+    assert StateStore(path).get("tree") is None
 
 
 def test_one_bad_entry_does_not_hide_the_others(tmp_path):
@@ -173,7 +172,8 @@ def test_one_bad_entry_does_not_hide_the_others(tmp_path):
 
     store = StateStore(path)
 
-    assert list(store.all()) == ["tree"]
+    assert store.get("tree") is not None
+    assert store.get("porch") is None
 
 
 # ---- a read-only /data -----------------------------------------------------

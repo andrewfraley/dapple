@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import aiomqtt
 import pytest
 
+from app.actions import GroupActions
 from app.config import AppConfig, ConfigStore, MqttConfig, normalize_device
 from app.models import DeviceInfo, DeviceResult, GroupState, Pattern, Slot
 from app.mqtt import MqttBridge, Topics, availability, run_command, state_payload
@@ -127,6 +128,9 @@ class StrandManager:
     def __init__(self, groups):
         self.groups = groups
         self.applied = []
+        self.reads = []
+        #: raised by the next live_state call, once
+        self.fail_next_read = None
 
     def group(self, group_id):
         from app.config import UnknownGroupError
@@ -162,7 +166,11 @@ class StrandManager:
     async def turn_off(self, group_id):
         return self._each(group_id, lambda strand: setattr(strand, "mode", "off"))
 
-    async def live_state(self):
+    async def live_state(self, group_id=None):
+        self.reads.append(group_id)
+        error, self.fail_next_read = self.fail_next_read, None
+        if error is not None:
+            raise error
         return [
             DeviceInfo(
                 name=strand.name,
@@ -173,6 +181,7 @@ class StrandManager:
                 brightness=strand.brightness if strand.answers else None,
             )
             for group in self.groups
+            if group_id in (None, group.id)
             for strand in group.devices
         ]
 
@@ -199,15 +208,15 @@ class Rig:
             ]
         )
         self.broker = FakeBroker(refuse=refuse)
+        self.actions = GroupActions(self.manager, self.presets, self.state)
         self.bridge = MqttBridge(
             self.strands,
-            self.presets,
-            self.state,
-            self.manager,
+            self.actions,
             version="test",
             client_factory=self.broker.client,
             poll_interval=poll_interval,
         )
+        self.actions.on_change = self.bridge.group_changed
         self.topics = Topics(settings or SETTINGS)
 
     def strand(self, host):
@@ -562,6 +571,32 @@ def test_a_lost_connection_reconnects_and_republishes(rig, monkeypatch):
         await rig.until(lambda: len(rig.broker.connections) == 2, "the reconnect")
         await rig.until(lambda: rig.bridge.status == "connected")
         assert rig.broker.retained["dapple/status"] == "online"
+
+    rig.run(scenario)
+
+
+def test_an_unexpected_error_reconnects_instead_of_going_quiet(rig, monkeypatch):
+    """Not an MqttError: before, the task just ended and the status stayed
+    "connected" with nothing listening."""
+    monkeypatch.setattr("app.mqtt.RETRY_MIN_SECONDS", 0.01)
+    rig.manager.fail_next_read = RuntimeError("strand read blew up")
+
+    async def scenario():
+        rig.bridge.start()
+        await rig.until(lambda: len(rig.broker.connections) == 2, "the reconnect")
+        await rig.until(lambda: rig.bridge.status == "connected")
+        assert rig.broker.last(rig.topics.availability("spare")) is not None
+
+    rig.run(scenario)
+
+
+def test_a_change_to_one_group_reads_only_that_groups_strands(rig):
+    async def scenario():
+        await rig.connected()
+        rig.manager.reads.clear()
+        rig.bridge.group_changed("porch")
+        await rig.settle()
+        assert rig.manager.reads == ["porch"]
 
     rig.run(scenario)
 

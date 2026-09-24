@@ -19,9 +19,9 @@ scripts/smoke.py  one strand, one pattern, from the command line
 ## Running from source
 
 ```bash
-uv venv && uv pip install -e ".[dev]"
+uv sync --extra dev                        # .venv, pinned to uv.lock, with Dapple itself editable
 .venv/bin/pre-commit install               # Black and Prettier on every commit
-.venv/bin/python -m pytest                 # 318 tests, no network, no strands
+.venv/bin/python -m pytest                 # 329 tests, no network, no strands
 
 npm --prefix frontend install
 npm --prefix frontend test                 # the JS pattern port vs the Python fixtures
@@ -29,6 +29,12 @@ npm --prefix frontend run dev              # UI on :5173, proxying /api to :8080
 
 DAPPLE_DATA_DIR=./data .venv/bin/uvicorn app.main:app --reload --port 8080
 ```
+
+`uv.lock` pins every Python dependency. CI and the Docker image both install from it, so what
+the tests ran against is what ships. After changing dependencies in `pyproject.toml`, run
+`uv lock`. To take newer versions, run `uv lock --upgrade`, then run the tests and commit the
+lock. Run `uv sync --extra dev` after a version bump too, because the running app reads its
+version from the installed package.
 
 The API serves the built UI from `static/` (where the Docker image puts it) or `frontend/dist/`,
 whichever exists. With neither, `/` explains what to build and `/docs` still works.
@@ -57,6 +63,12 @@ downloads. In a checkout, `docker-compose.override.yml` adds `build: .`, so
 | Host port | — | `DAPPLE_PORT` (override only) | `8080` |
 | Run as uid / gid | — | `PUID` / `PGID` | `1000` |
 | Log timezone | — | `TZ` | `Etc/UTC` |
+| Built UI to serve | — | `DAPPLE_STATIC_DIR` | `static/`, else `frontend/dist/` |
+| API behind `npm run dev` | — | `DAPPLE_API` (Vite only) | `http://localhost:8080` |
+
+Where a setting can come from both, `config.yaml` wins. The Strands and Home Assistant tabs
+rewrite the file, but they only write `movie_frames`, `timeout` and `gamma` back if the file
+already had them, so an env var keeps working until you put the key in the file yourself.
 
 ```yaml
 groups:
@@ -67,9 +79,10 @@ groups:
         host: 192.168.40.21
       - name: TreeBottom
         host: 192.168.40.22
-        # Read from the strand unless pinned here. The strand is the authority:
-        # the frame we upload must be exactly as long as it expects, so a count
-        # that disagrees breaks the upload rather than fixing anything.
+        # Read from the strand unless pinned here. Pin them only for a strand
+        # that misreports, or to build patterns before the strands are on the
+        # network: the frame we upload is exactly this long, and a strand may
+        # refuse one that doesn't match what it expects.
         # number_of_led: 250
         # led_profile: RGBW
 ```
@@ -87,15 +100,7 @@ mqtt:
 
 `config.yaml` is the only way to configure strands: the Strands tab writes it, and you can
 hand-write it to seed a deployment. Starting with no file at all is normal — the first strand
-you add creates one.
-
-(There used to be a `TWINKLY_HOSTS` env var for a zero-config first run. It was dropped once the
-Strands tab existed: it could only ever produce a single group, so on any multi-group setup it
-silently put unrelated runs of lights into one stretched pattern.)
-
-A file written before groups existed (a flat `devices:` list) loads as a single group,
-`all-strands`, which is exactly how it behaved before. Loading is side-effect free; it's
-rewritten in the new shape on the first edit.
+you add creates one. Loading never writes to it.
 
 ---
 
@@ -142,7 +147,8 @@ Everything under `/api`, JSON in and out, errors as `{"detail": "…"}`. Interac
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/api/health` | `{ok, devices: [{name, host, ok, error}]}` — what the container HEALTHCHECK calls |
+| GET | `/api/ping` | `{"ok": true}` — liveness only, never touches a strand; what the container HEALTHCHECK calls |
+| GET | `/api/health` | `{ok, devices: [{name, host, ok, error}]}` — asks every strand; `ok` is false if any is down, still 200 |
 | GET | `/api/devices` | every strand: LED count, profile, firmware, mode, brightness, and its `group` |
 | POST | `/api/devices/refresh` | re-read gestalt for every strand. Changes nothing on the strands — only our cache — which is why it takes no group |
 | POST | `/api/preview` | `{pattern, num_leds, offset}` → the pattern as `[r,g,b,w]` per LED |
@@ -202,6 +208,10 @@ A `Pattern`:
 
 `rgbw` is 0–255 per channel; on an RGBW strand a true white is `[0, 0, 0, 255]`, and saturated
 colors keep `w` at 0. `weight: 0` parks a slot without using it. `brightness` is optional.
+
+Limits: up to 16 slots (the editor offers 8), `weight` 0–1000, `block_size` 1–500, `brightness`
+0–100. The reduced repeating unit (the weights divided by their GCD, summed, times `block_size`
+when blocked) must be at most 100,000 LEDs; anything the editor can build is well under that.
 
 A group from `GET /api/groups`:
 
@@ -333,7 +343,8 @@ orange reading as green is byte order.
 `mode: movie` and brightness isn't 0.
 
 **Only part of a run lights up** — the strand under-reports `number_of_led`. Pin the real count
-in `config.yaml`.
+in `config.yaml`. If uploads start failing after that, the firmware won't take a frame of that
+length, and the pin has to go.
 
 **The pattern restarts at the second strand** — they're in different groups, in the wrong order
 within their group, or one reports the wrong LED count. `GET /api/groups` shows the offsets in
@@ -351,12 +362,28 @@ starts at its own LED 0. That's a bug.
 
 | Push | Tags |
 |---|---|
-| `main` | `latest`, `sha-<commit>` |
+| `main` | `latest`, `sha-<commit>`, and `1.2.3` + `1.2` when it's a release (below) |
 | any other branch, e.g. `mqtt-discovery` | `mqtt-discovery`, `sha-<commit>` |
 | tag `v1.2.3` | `1.2.3`, `1.2`, `sha-<commit>` |
 
 A branch build never touches `latest` or a version tag, so it's safe to push work in progress.
 Slashes in a branch name become dashes (`feature/x` → `feature-x`).
+
+**Changes reach `main` only through pull requests, and a person merges them.** Push a branch, open
+a PR, and wait for CI and a review.
+
+**Releasing is a pull request that bumps the version.** In that PR:
+
+1. Set the new version in `pyproject.toml` and `frontend/package.json`. Then run
+   `npm --prefix frontend install --package-lock-only` and `uv lock` so both lock files follow.
+   CI fails if the two versions differ or `uv.lock` is stale.
+2. Add the release notes as `docs/releases/<version>.md`, written for people running Dapple, not
+   developers. CI fails on a PR whose version has no tag and no notes file.
+
+When the PR is merged, the `main` build sees a version with no `v<version>` tag. It pushes the
+image as `latest`, `<version>` and `<major>.<minor>`, then tags the merge commit and creates the
+GitHub release `Dapple <version>` from the notes file. A PR that doesn't bump the version just
+moves `latest`.
 
 **Testing a branch build.** On the machine that runs Dapple, point `docker-compose.yml` at the
 branch tag and pull it:

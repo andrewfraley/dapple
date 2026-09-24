@@ -3,6 +3,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from app.actions import GroupActions
 from app.config import AppConfig, ConfigStore, DeviceConfig, MqttConfig, load_config
 from app.main import app
 from app.models import DeviceInfo, DeviceResult, StrandSegment
@@ -240,6 +241,7 @@ def build_client(config, manager, seed_presets=True):
     app.state.group_state = StateStore(config.state_path)
     app.state.strands = ConfigStore(config)
     app.state.mqtt = FakeBridge()
+    app.state.actions = GroupActions(manager, app.state.presets, app.state.group_state)
     manager.store = app.state.strands
     return TestClient(app)
 
@@ -255,6 +257,14 @@ def add(client, host, **fields):
 
 
 # ---- status ---------------------------------------------------------------
+
+
+def test_ping_answers_without_asking_any_strand(client, manager):
+    """It's the container HEALTHCHECK: every 30s, forever."""
+    before = list(manager.calls)
+
+    assert client.get("/api/ping").json() == {"ok": True}
+    assert manager.calls == before
 
 
 def test_health(client):
@@ -711,6 +721,24 @@ def test_a_partial_reorder_within_a_group_is_refused(client):
 
     assert response.status_code == 400
     assert "exactly once" in response.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    "method, path, body",
+    [
+        ("put", "/api/config/strands/10.0.0.9", {"host": "10.0.0.9"}),
+        ("put", "/api/config/strands/10.0.0.9/group", {"group": "tree"}),
+        ("delete", "/api/config/strands/10.0.0.9", None),
+    ],
+)
+def test_an_unknown_strand_is_a_404_like_an_unknown_group(client, method, path, body):
+    client.post("/api/config/groups", json={"name": "Tree"})
+    kwargs = {"json": body} if body is not None else {}
+
+    response = getattr(client, method)(path, **kwargs)
+
+    assert response.status_code == 404
+    assert "No strand configured" in response.json()["detail"]
 
 
 def test_delete_a_strand(client):

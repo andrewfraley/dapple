@@ -15,14 +15,12 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-
 from typing import Sequence
 
 from app.models import DeviceInfo, GroupLive, GroupState, Pattern
+from app.storage import atomic_write
 
 log = logging.getLogger(__name__)
 
@@ -60,10 +58,6 @@ def live_state(
     )
 
 
-class StateStorageError(Exception):
-    """state.json could not be written — almost always /data permissions."""
-
-
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -91,9 +85,6 @@ class StateStore:
             except Exception as exc:  # a hand-edited file shouldn't take the app down
                 log.error("Skipping state for group %r: %s", group_id, exc)
         return state
-
-    def all(self) -> dict[str, GroupState]:
-        return dict(self._state)
 
     def get(self, group_id: str) -> GroupState | None:
         """None when a group has never been applied to — not an error."""
@@ -147,8 +138,12 @@ class StateStore:
 
     def _save(self) -> None:
         """Write, or log and carry on — never raise into a request."""
+        payload = {
+            group_id: json.loads(state.model_dump_json())
+            for group_id, state in sorted(self._state.items())
+        }
         try:
-            self._write_atomically()
+            atomic_write(self.path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
         except OSError as exc:
             if self.writable:  # log the first time, not on every apply
                 log.error(
@@ -160,23 +155,3 @@ class StateStore:
             self.writable = False
             return
         self.writable = True
-
-    def _write_atomically(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            group_id: json.loads(state.model_dump_json())
-            for group_id, state in sorted(self._state.items())
-        }
-        handle, temp_path = tempfile.mkstemp(
-            dir=str(self.path.parent), prefix=".state-", suffix=".json"
-        )
-        try:
-            with os.fdopen(handle, "w") as file:
-                json.dump(payload, file, indent=2, sort_keys=True)
-                file.write("\n")
-                file.flush()
-                os.fsync(file.fileno())
-            os.replace(temp_path, self.path)
-        except BaseException:
-            Path(temp_path).unlink(missing_ok=True)
-            raise

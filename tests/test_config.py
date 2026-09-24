@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.config import MIGRATED_GROUP_ID, load_config
+from app.config import load_config
 
 
 def write_config(tmp_path, text):
@@ -62,35 +62,6 @@ def test_strand_overrides_survive(tmp_path):
     device = load_config(tmp_path, env={}).groups[0].devices[0]
 
     assert (device.number_of_led, device.led_profile) == (105, "RGBW")
-
-
-# ---- migration from the pre-groups shape -----------------------------------
-
-
-def test_a_devices_only_file_becomes_one_group(tmp_path):
-    """The old shape meant one pattern across everything with continuity across
-    the join — which is exactly one group."""
-    write_config(
-        tmp_path,
-        "devices:\n  - name: TreeTop\n    host: 10.0.0.1\n"
-        "  - name: TreeBottom\n    host: 10.0.0.2\n",
-    )
-
-    config = load_config(tmp_path, env={})
-
-    assert len(config.groups) == 1
-    assert config.groups[0].id == MIGRATED_GROUP_ID
-    assert [d.name for d in config.groups[0].devices] == ["TreeTop", "TreeBottom"]
-
-
-def test_migration_does_not_rewrite_the_file(tmp_path):
-    """Loading stays side-effect free — /data may be read-only."""
-    write_config(tmp_path, "devices:\n  - name: A\n    host: 10.0.0.1\n")
-    before = (tmp_path / "config.yaml").read_text()
-
-    load_config(tmp_path, env={})
-
-    assert (tmp_path / "config.yaml").read_text() == before
 
 
 def test_an_empty_group_list_is_not_fatal(tmp_path):

@@ -14,7 +14,7 @@ from pathlib import Path
 from app.config import STATE_FILENAME
 from app.devices import DeviceManager
 from app.main import app  # noqa: F401 — what uvicorn serves
-from app.models import DeviceInfo, Pattern, Slot
+from app.models import DeviceInfo
 from app.presets import default_presets
 from app.state import StateStore
 
@@ -41,14 +41,8 @@ async def _every_strand_on(self, group_id=None):
 
 DeviceManager.live_state = _every_strand_on
 
-# Halloween's 4:1, scaled up: the preset stores it as weights 4 and 1, which
-# would leave both share sliders sitting at the far left.
-halloween = default_presets()["Halloween"]
 StateStore(Path(os.environ["DAPPLE_DATA_DIR"]) / STATE_FILENAME).record(
     "tree",
-    Pattern(
-        slots=[Slot(rgbw=slot.rgbw, weight=slot.weight * 20) for slot in halloween.slots],
-        brightness=BRIGHTNESS,
-    ),
+    default_presets()["Halloween"].model_copy(update={"brightness": BRIGHTNESS}),
     preset="Halloween",
 )
