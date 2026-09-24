@@ -130,8 +130,9 @@ This repo is open source; `data/` and `.env` are the only places real details ma
   `request`, because the auth handshake bypasses `request`.
 - `401` warnings from `xled.auth` in the logs are normal and self-healing.
 - Startup refreshes devices in a background task so unreachable strands don't block boot.
-- `data/` is bind-mounted and owned by the host user; the compose file runs the container as
-  uid 1000 via `DAPPLE_UID`/`DAPPLE_GID`.
+- `data/` is bind-mounted and owned by the host user. The container starts as root so
+  `scripts/entrypoint.sh` can chown anything root-owned in `/data` (Docker creates a missing
+  bind source as root), then drops to `DAPPLE_UID`/`DAPPLE_GID` (default 1000) via `setpriv`.
 - The repo is public on GitHub (`andrewfraley/dapple`); the image is `afraley/dapple` on Docker Hub,
   published by `.github/workflows/docker.yml`. `docker-compose.yml` must stay usable on its own
   (users download only that file), so anything that needs the source goes in the override.

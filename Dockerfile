@@ -24,11 +24,10 @@ RUN pip install --no-cache-dir .
 
 COPY --from=ui /ui/dist/ ./static/
 
-# The strands are on the LAN, not in here; the container only needs /data.
-RUN useradd --system --uid 10001 --home /srv dapple \
-    && mkdir -p /data \
-    && chown -R dapple:dapple /srv /data
-USER dapple
+# Starts as root only long enough for the entrypoint to claim /data, then runs
+# as DAPPLE_UID:DAPPLE_GID. The strands are on the LAN; the container only needs /data.
+COPY scripts/entrypoint.sh /usr/local/bin/dapple-entrypoint
+RUN mkdir -p /data
 
 VOLUME ["/data"]
 EXPOSE 8080
@@ -36,4 +35,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/api/health', timeout=8).status == 200 else 1)"
 
+ENTRYPOINT ["dapple-entrypoint"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]

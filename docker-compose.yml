@@ -7,4 +7,6 @@ services:
       - "${DAPPLE_PORT:-8080}:8080"
     volumes:
       - ./data:/data:z
-    user: "${DAPPLE_UID:-1000}:${DAPPLE_GID:-1000}"
+    environment:
+      DAPPLE_UID: "${DAPPLE_UID:-1000}"
+      DAPPLE_GID: "${DAPPLE_GID:-1000}"
