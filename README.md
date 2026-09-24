@@ -144,8 +144,12 @@ editor, so you can adjust it first. Nothing reaches the lights until you click *
 
 ## Turning the lights on and off
 
-**On** and **Off** on the Pattern tab affect the selected group only. Off doesn't erase the
-pattern — the lights keep it and show it again when you press On.
+The switch next to the group's name on the Pattern tab turns that group on and off, and nothing
+else. Off doesn't erase the pattern: the lights keep it and show it again when you switch them
+back on.
+
+The switch shows what the lights are really doing. If you turn them off from Home Assistant or
+the Twinkly app, the page catches up within a few seconds.
 
 ---
 

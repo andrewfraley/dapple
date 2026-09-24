@@ -20,9 +20,44 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app.models import GroupState, Pattern
+from typing import Sequence
+
+from app.models import DeviceInfo, GroupLive, GroupState, Pattern
 
 log = logging.getLogger(__name__)
+
+#: Modes in which a strand is showing Dapple's movie, or nothing at all. Any
+#: other mode (color, effect, playlist…) means something else took over.
+OWN_MODES = frozenset({"movie", "off"})
+
+
+def live_state(
+    recorded: GroupState | None, infos: Sequence[DeviceInfo], presets: set[str]
+) -> GroupLive:
+    """A group as its strands report it, for the UI and for Home Assistant alike.
+
+    The group counts as on while any strand is lit. The preset is the one Dapple
+    last applied, but only while the strands are still showing it.
+    """
+    answered = [info for info in infos if info.mode is not None]
+    power = None
+    taken_over = False
+    if answered:
+        power = "on" if any(info.mode != "off" for info in answered) else "off"
+        taken_over = any(info.mode not in OWN_MODES for info in answered)
+    preset = None
+    if recorded is not None and recorded.preset in presets and not taken_over:
+        preset = recorded.preset
+    return GroupLive(
+        power=power,
+        brightness=next(
+            (info.brightness for info in answered if info.brightness is not None), None
+        ),
+        preset=preset,
+        taken_over=taken_over,
+        answering=len(answered),
+        strands=len(infos),
+    )
 
 
 class StateStorageError(Exception):

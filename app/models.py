@@ -146,6 +146,25 @@ class GroupState(BaseModel):
     applied_at: datetime
 
 
+class GroupLive(BaseModel):
+    """What a group's strands are doing right now, read from them.
+
+    Unlike :class:`GroupState`, this is a readback: it notices the Twinkly app
+    or Home Assistant's Twinkly integration switching a strand off, or putting
+    something else on it.
+    """
+
+    #: None when no strand answered — unknown, not off.
+    power: Literal["on", "off"] | None = None
+    brightness: int | None = None
+    #: The preset showing, when the strands still show what Dapple last applied.
+    preset: str | None = None
+    #: Something other than Dapple's pattern is lit (a Twinkly color or effect).
+    taken_over: bool = False
+    answering: int = 0
+    strands: int = 0
+
+
 class GroupModel(BaseModel):
     """A group as configured."""
 

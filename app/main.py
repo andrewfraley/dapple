@@ -31,6 +31,7 @@ from app.models import (
     ConfigResponse,
     DeviceInfo,
     GroupCreate,
+    GroupLive,
     GroupModel,
     GroupOrderRequest,
     GroupRename,
@@ -50,7 +51,7 @@ from app.models import (
 from app.mqtt import MqttBridge
 from app.pattern import led_colors
 from app.presets import PresetError, PresetStorageError, PresetStore
-from app.state import StateStore
+from app.state import StateStore, live_state
 
 logging.basicConfig(
     level=os.environ.get("DAPPLE_LOG_LEVEL", "INFO").upper(),
@@ -251,6 +252,15 @@ async def list_groups(request: Request) -> list[GroupStatus]:
 @app.get("/api/groups/{group_id}", response_model=GroupStatus)
 async def get_group(request: Request, group_id: str) -> GroupStatus:
     return _group_status(request, manager(request).group(group_id))
+
+
+@app.get("/api/groups/{group_id}/live", response_model=GroupLive)
+async def get_group_live(request: Request, group_id: str) -> GroupLive:
+    """Read from the strands, so it's slower than GET /api/groups — and right
+    when something other than Dapple has changed them."""
+    group = manager(request).group(group_id)
+    infos = await manager(request).live_state(group.id)
+    return live_state(group_state(request).get(group.id), infos, set(presets(request).names()))
 
 
 @app.post("/api/groups/{group_id}/apply", response_model=ApplyResponse)

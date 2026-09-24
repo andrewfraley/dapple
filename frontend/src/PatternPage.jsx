@@ -10,11 +10,13 @@ import DialogContent from '@mui/material/DialogContent'
 import DialogTitle from '@mui/material/DialogTitle'
 import Divider from '@mui/material/Divider'
 import FormControl from '@mui/material/FormControl'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import InputLabel from '@mui/material/InputLabel'
 import MenuItem from '@mui/material/MenuItem'
 import Select from '@mui/material/Select'
 import Slider from '@mui/material/Slider'
 import Stack from '@mui/material/Stack'
+import Switch from '@mui/material/Switch'
 import Tab from '@mui/material/Tab'
 import Tabs from '@mui/material/Tabs'
 import TextField from '@mui/material/TextField'
@@ -30,6 +32,8 @@ import SlotRow from './SlotRow.jsx'
 const MAX_SLOTS = 8
 const FALLBACK_LEDS = 200
 const TABS_UP_TO = 4
+/** How often the strands are re-read while the page is open and visible. */
+const LIVE_POLL_MS = 5000
 
 const STARTING_PATTERN = {
   slots: [
@@ -50,16 +54,32 @@ const NEW_SLOT_COLORS = [
   [0, 0, 0, 255],
 ]
 
-/** "Showing Halloween, applied 18:04" — what this group is currently set to. */
-function stateSummary(group) {
-  if (!group?.state) return 'Nothing applied yet.'
-  const when = new Date(group.state.applied_at).toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-  const what = group.state.preset ? `“${group.state.preset}”` : 'a custom pattern'
-  if (group.state.power === 'off') return `Off. Last applied ${what} at ${when}.`
-  return `Last applied ${what} at ${when}.`
+/**
+ * "Showing “Halloween”, applied 18:04." — what the strands are doing, from
+ * `live` (read from them) where there is one, else from what Dapple last sent.
+ */
+function stateSummary(group, live) {
+  const state = group?.state
+  const when =
+    state &&
+    new Date(state.applied_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const what = state?.preset ? `“${state.preset}”` : 'a custom pattern'
+  const last = state ? ` Last applied ${what} at ${when}.` : ''
+
+  if (!live) return state ? `Last applied ${what} at ${when}.` : 'Nothing applied yet.'
+  if (live.power === null) return `No strands are answering.${last}`
+  if (live.taken_over) {
+    return (
+      'Showing a color or effect set outside Dapple (the Twinkly app, or Home Assistant’s ' +
+      'Twinkly integration). Apply a pattern to take it back.'
+    )
+  }
+  if (live.power === 'off') {
+    return state
+      ? `Off. ${what[0].toUpperCase()}${what.slice(1)} comes back when switched on.`
+      : 'Off.'
+  }
+  return state ? `Showing ${what}, applied ${when}.` : 'On.'
 }
 
 /** Build a pattern, preview it, and apply it to one group. */
@@ -81,6 +101,48 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
   const [fromPreset, setFromPreset] = useState(null)
 
   const group = groups.find((candidate) => candidate.id === groupId) || null
+
+  // What the strands are doing, re-read every few seconds so a change made in
+  // Home Assistant or the Twinkly app shows up here without a reload.
+  const [liveReading, setLiveReading] = useState(null)
+  const live = liveReading?.groupId === groupId ? liveReading : null
+  const readLive = useCallback(async () => {
+    if (!groupId) return
+    try {
+      setLiveReading({ groupId, ...(await api.getGroupLive(groupId)) })
+    } catch {
+      /* keep the last reading; the next poll tries again */
+    }
+  }, [groupId])
+
+  useEffect(() => {
+    readLive()
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') readLive()
+    }, LIVE_POLL_MS)
+    return () => clearInterval(timer)
+  }, [readLive])
+
+  // Follow changes made elsewhere — but only changes: taking the strand's
+  // brightness on every poll would undo a preset loaded and not yet applied.
+  const draggingBrightness = useRef(false)
+  const lastLive = useRef(null)
+  useEffect(() => {
+    if (!live) return
+    const previous = lastLive.current?.groupId === live.groupId ? lastLive.current : null
+    lastLive.current = live
+    if (!previous) return
+    if (
+      live.brightness !== null &&
+      live.brightness !== previous.brightness &&
+      !draggingBrightness.current
+    ) {
+      setPattern((current) => ({ ...current, brightness: live.brightness }))
+    }
+    // HA's commands go through Dapple, so "last applied" has moved too.
+    if (live.power !== previous.power || live.preset !== previous.preset) onChanged?.()
+  }, [live, onChanged])
+
   const known = Boolean(group && group.segments.length)
   // With nothing to go on, offer the white channel rather than hide a control
   // the strands may well support.
@@ -208,8 +270,15 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
   // ---- actions ------------------------------------------------------------
 
   const after = async (result) => {
-    await onChanged?.()
+    await Promise.all([onChanged?.(), readLive()])
     return result
+  }
+
+  const setPower = (on) => {
+    setLiveReading((current) => current && { ...current, power: on ? 'on' : 'off' })
+    return run(`${group.name} ${on ? 'on' : 'off'}`, () =>
+      (on ? api.turnGroupOn(groupId) : api.turnGroupOff(groupId)).then(after),
+    )
   }
 
   const onApply = () =>
@@ -298,9 +367,38 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
 
         <Card variant="outlined">
           <CardContent>
-            <Typography variant="subtitle2" component="h2" gutterBottom>
-              {group?.name}
-            </Typography>
+            <Stack
+              direction="row"
+              alignItems="center"
+              justifyContent="space-between"
+              spacing={1}
+              sx={{ mb: 0.5 }}
+            >
+              <Typography variant="subtitle2" component="h2">
+                {group?.name}
+              </Typography>
+              <FormControlLabel
+                labelPlacement="start"
+                label={
+                  !live
+                    ? 'Checking…'
+                    : live.power === null
+                      ? 'Not answering'
+                      : live.power === 'on'
+                        ? 'On'
+                        : 'Off'
+                }
+                control={
+                  <Switch
+                    checked={live?.power === 'on'}
+                    disabled={busy || !live || live.power === null}
+                    onChange={(event) => setPower(event.target.checked)}
+                    inputProps={{ 'aria-label': `${group?.name ?? 'Group'} power` }}
+                  />
+                }
+                sx={{ mr: 0 }}
+              />
+            </Stack>
             <PreviewStrip
               pattern={pattern}
               totalLeds={previewLeds}
@@ -308,7 +406,7 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
               known={known}
             />
             <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-              {stateSummary(group)}
+              {stateSummary(group, live)}
             </Typography>
           </CardContent>
         </Card>
@@ -397,38 +495,19 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
                   min={0}
                   max={100}
                   valueLabelDisplay="auto"
-                  onChange={(_event, value) =>
+                  onChange={(_event, value) => {
+                    draggingBrightness.current = true
                     setPattern((current) => ({ ...current, brightness: value }))
-                  }
-                  onChangeCommitted={(_event, value) =>
+                  }}
+                  onChangeCommitted={(_event, value) => {
+                    draggingBrightness.current = false
                     run(`Brightness ${value}%`, () =>
                       api.setGroupBrightness(groupId, value).then(after),
                     )
-                  }
+                  }}
                   aria-label="Brightness"
                 />
               </Box>
-
-              <Stack direction="row" spacing={1.5}>
-                <Button
-                  variant="outlined"
-                  onClick={() =>
-                    run(`${group.name} on`, () => api.turnGroupOn(groupId).then(after))
-                  }
-                  disabled={busy}
-                >
-                  On
-                </Button>
-                <Button
-                  variant="outlined"
-                  onClick={() =>
-                    run(`${group.name} off`, () => api.turnGroupOff(groupId).then(after))
-                  }
-                  disabled={busy}
-                >
-                  Off
-                </Button>
-              </Stack>
             </Stack>
           </CardContent>
         </Card>

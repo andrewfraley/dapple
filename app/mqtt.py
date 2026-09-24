@@ -30,7 +30,7 @@ from app.actions import GroupActions
 from app.config import ConfigStore, MqttConfig
 from app.models import DeviceInfo, GroupState
 from app.presets import PresetStore
-from app.state import StateStore
+from app.state import StateStore, live_state
 
 log = logging.getLogger(__name__)
 
@@ -38,10 +38,6 @@ POLL_SECONDS = 60.0
 RETRY_MIN_SECONDS = 5.0
 RETRY_MAX_SECONDS = 60.0
 SUPPORT_URL = "https://github.com/andrewfraley/dapple"
-
-#: Modes in which a strand is showing Dapple's movie, or nothing at all. Any
-#: other mode (color, effect, playlist…) means something else took over.
-OWN_MODES = frozenset({"movie", "off"})
 
 
 class Topics:
@@ -121,39 +117,27 @@ def discovery_payload(
     }
 
 
-def _answered(infos: Sequence[DeviceInfo]) -> list[DeviceInfo]:
-    return [info for info in infos if info.mode is not None]
-
-
 def state_payload(
     recorded: GroupState | None, infos: Sequence[DeviceInfo], presets: set[str]
 ) -> dict[str, Any]:
     """What HA should show for a group: live where the strands answered.
 
-    The effect is the preset Dapple last applied, but only while the strands
-    are still showing it. After a color or effect from the native integration
-    it's cleared, so HA doesn't claim a pattern that isn't lit.
+    When none answer, fall back to what Dapple last sent — the light shows as
+    unavailable then anyway.
     """
-    answered = _answered(infos)
-    if answered:
-        on = any(info.mode != "off" for info in answered)
-        taken_over = any(info.mode not in OWN_MODES for info in answered)
+    live = live_state(recorded, infos, presets)
+    if live.power is not None:
+        on = live.power == "on"
     else:
         on = recorded is not None and recorded.power == "on"
-        taken_over = False
-
-    brightness = next((info.brightness for info in answered if info.brightness is not None), None)
+    brightness = live.brightness
     if brightness is None and recorded is not None:
         brightness = recorded.pattern.brightness
-
-    effect = None
-    if recorded is not None and recorded.preset in presets and not taken_over:
-        effect = recorded.preset
 
     payload: dict[str, Any] = {
         "state": "ON" if on else "OFF",
         "color_mode": "brightness",
-        "effect": effect,
+        "effect": live.preset,
     }
     if brightness is not None:
         payload["brightness"] = brightness
@@ -162,7 +146,7 @@ def state_payload(
 
 def availability(infos: Sequence[DeviceInfo]) -> str:
     """Online while any strand in the group answers — the rest can still be driven."""
-    return "online" if _answered(infos) else "offline"
+    return "online" if any(info.mode is not None for info in infos) else "offline"
 
 
 async def run_command(actions: GroupActions, group_id: str, command: dict[str, Any]) -> None:

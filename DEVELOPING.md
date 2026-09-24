@@ -21,7 +21,7 @@ scripts/smoke.py  one strand, one pattern, from the command line
 ```bash
 uv venv && uv pip install -e ".[dev]"
 .venv/bin/pre-commit install               # Black and Prettier on every commit
-.venv/bin/python -m pytest                 # 314 tests, no network, no strands
+.venv/bin/python -m pytest                 # 318 tests, no network, no strands
 
 npm --prefix frontend install
 npm --prefix frontend test                 # the JS pattern port vs the Python fixtures
@@ -153,6 +153,7 @@ Everything under `/api`, JSON in and out, errors as `{"detail": "…"}`. Interac
 |---|---|---|---|
 | GET | `/api/groups` | | each group's strands, LED total, segments and what it's showing |
 | GET | `/api/groups/{group}` | | 404 if unknown |
+| GET | `/api/groups/{group}/live` | | read from the strands: `power` (`null` if none answer), `brightness`, the `preset` still showing, `taken_over` |
 | POST | `/api/groups/{group}/apply` | `Pattern` | 503 if the group has no strands |
 | POST | `/api/groups/{group}/preset` | `{"name": "Halloween"}` | what Home Assistant calls |
 | POST | `/api/groups/{group}/brightness` | `{"value": 0-100}` | |
@@ -228,8 +229,9 @@ request:
 ]}
 ```
 
-`state` is what was **last applied**, not a readback. The strands hold their movie themselves, so
-a power cycle or someone opening the Twinkly app can make it optimistic.
+`state` is what was **last applied**, not a readback. The strands hold their movie themselves,
+so a power cycle or someone opening the Twinkly app can make it optimistic. `/live` is the
+readback, and it's what both the Pattern tab's power switch and Home Assistant show.
 
 ---
 

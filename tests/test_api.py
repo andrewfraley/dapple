@@ -79,6 +79,7 @@ class FakeManager:
         self.brightness = []
         self.calls = []
         self.synced = 0
+        self.live_modes = {}
         self.probed = []
         self.groups = (
             groups
@@ -161,6 +162,22 @@ class FakeManager:
     async def refresh(self):
         self.calls.append("refresh")
         return await self.info()
+
+    async def live_state(self, group_id=None):
+        """Every strand answers in ``live_mode`` unless a test says otherwise."""
+        return [
+            DeviceInfo(
+                name=device.name,
+                host=device.host,
+                group=group.id,
+                reachable=True,
+                mode=self.live_modes.get(device.host, "movie"),
+                brightness=45,
+            )
+            for group in self.groups
+            if group_id in (None, group.id)
+            for device in group.devices
+        ]
 
     async def apply_pattern(self, group_id, pattern):
         self.applied.append((group_id, pattern))
@@ -848,3 +865,38 @@ def test_preset_and_group_edits_update_home_assistant(client):
     client.post("/api/config/groups", json={"name": "Porch"})
 
     assert app.state.mqtt.config_changes == 3
+
+
+# ---- live state --------------------------------------------------------------
+
+
+def test_live_state_comes_from_the_strands_not_from_what_was_sent(client, manager):
+    """Home Assistant's Twinkly integration switched the tree off behind Dapple's back."""
+    client.post("/api/groups/tree/preset", json={"name": "Halloween"})
+    manager.live_modes = {"10.0.0.1": "off", "10.0.0.2": "off"}
+
+    live = client.get("/api/groups/tree/live").json()
+
+    assert (live["power"], live["preset"], live["brightness"]) == ("off", "Halloween", 45)
+    assert client.get("/api/groups/tree").json()["state"]["power"] == "on"
+
+
+def test_live_state_names_the_preset_only_while_it_is_showing(client, manager):
+    client.post("/api/groups/tree/preset", json={"name": "Halloween"})
+    manager.live_modes = {"10.0.0.2": "color"}
+
+    live = client.get("/api/groups/tree/live").json()
+
+    assert (live["power"], live["preset"], live["taken_over"]) == ("on", None, True)
+
+
+def test_live_state_with_no_strand_answering_is_unknown_not_off(client, manager):
+    manager.live_modes = {"10.0.0.1": None, "10.0.0.2": None}
+
+    live = client.get("/api/groups/tree/live").json()
+
+    assert (live["power"], live["answering"], live["strands"]) == (None, 0, 2)
+
+
+def test_live_state_of_an_unknown_group(client):
+    assert client.get("/api/groups/nowhere/live").status_code == 404
