@@ -1,64 +1,95 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
-import { useTheme } from '@mui/material/styles'
 
 import { cssColor, ledColors } from './pattern.js'
 
-const HEIGHT = 56
+// The panel is always dark, whatever the theme: lit bulbs only read as lights
+// against the dark, and it matches the logo.
+const PANEL = '#1c1a2b'
+const UNLIT = '#34304a'
+const LABEL = '#9e99b8'
+
+const TARGET_PITCH = 12
+const PADDING = 12
+const LABEL_HEIGHT = 18
+const STRAND_GAP = 10
 
 /**
- * The pattern as it will land on the physical run: one bar covering every
- * strand end to end, with a divider where one strand stops and the next
- * starts. Drawn from the same algorithm the server uses.
+ * One dot per LED, wrapped into rows, with each strand in its own block so the
+ * seam between strands is visible. The pattern still runs continuously across
+ * the blocks, exactly as the server lays it out. Drawn from the same algorithm
+ * the server uses.
  *
- * `known` is false while no strand has answered — the bar then shows a
+ * `known` is false while no strand has answered — the grid then shows a
  * plausible length so the controls still preview, and says so.
  */
 export default function PreviewStrip({ pattern, totalLeds, segments, known }) {
   const canvasRef = useRef(null)
-  const theme = useTheme()
+  const [width, setWidth] = useState(0)
 
+  // The row length depends on the width, so a resize has to redraw, not just
+  // stretch the bitmap.
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
+    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width))
+    observer.observe(canvas)
+    return () => observer.disconnect()
+  }, [])
+
+  const labelled = segments.length > 1
+  const inner = Math.max(0, width - PADDING * 2)
+  const columns = Math.max(1, Math.floor(inner / TARGET_PITCH))
+  const pitch = inner / columns
+  const blocks = segments.map((segment) => Math.ceil(segment.number_of_led / columns))
+  const height =
+    PADDING * 2 +
+    blocks.reduce((sum, rows) => sum + rows * pitch, 0) +
+    (labelled ? segments.length * LABEL_HEIGHT : 0) +
+    STRAND_GAP * (segments.length - 1)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !width) return
     const ratio = window.devicePixelRatio || 1
-    const width = canvas.clientWidth
     canvas.width = Math.max(1, Math.round(width * ratio))
-    canvas.height = Math.round(HEIGHT * ratio)
+    canvas.height = Math.round(height * ratio)
 
     const context = canvas.getContext('2d')
     context.setTransform(ratio, 0, 0, ratio, 0, 0)
-    context.clearRect(0, 0, width, HEIGHT)
+    context.fillStyle = PANEL
+    context.fillRect(0, 0, width, height)
 
     const leds = ledColors(pattern, totalLeds)
-    if (!leds.length) {
-      context.fillStyle = theme.palette.action.disabledBackground
-      context.fillRect(0, 0, width, HEIGHT)
-      return
-    }
+    const radius = pitch * 0.34
+    context.font = '11px system-ui, sans-serif'
+    context.textBaseline = 'middle'
 
-    // Sub-pixel LEDs are normal here (200+ LEDs in a phone-width strip). Snap
-    // each LED to the pixel where the next one starts: no gaps, and no LED
-    // painting over its neighbour.
-    const step = width / leds.length
-    leds.forEach((led, index) => {
-      const start = Math.round(index * step)
-      const end = Math.round((index + 1) * step)
-      context.fillStyle = cssColor(led)
-      context.fillRect(start, 0, Math.max(1, end - start), HEIGHT)
+    let top = PADDING
+    segments.forEach((segment, index) => {
+      if (labelled) {
+        context.shadowBlur = 0
+        context.fillStyle = LABEL
+        context.fillText(segment.name, PADDING, top + LABEL_HEIGHT / 2 - 2)
+        top += LABEL_HEIGHT
+      }
+      for (let led = 0; led < segment.number_of_led; led++) {
+        const color = leds[segment.offset + led]
+        const lit = color && color.some((channel) => channel > 0)
+        const x = PADDING + (led % columns + 0.5) * pitch
+        const y = top + (Math.floor(led / columns) + 0.5) * pitch
+        const fill = lit ? cssColor(color) : UNLIT
+        context.shadowColor = fill
+        context.shadowBlur = lit ? pitch * 0.6 : 0
+        context.fillStyle = fill
+        context.beginPath()
+        context.arc(x, y, radius, 0, Math.PI * 2)
+        context.fill()
+      }
+      top += blocks[index] * pitch + STRAND_GAP
     })
-
-    context.strokeStyle = theme.palette.background.paper
-    context.lineWidth = 2
-    segments.slice(1).forEach((segment) => {
-      const x = segment.offset * step
-      context.beginPath()
-      context.moveTo(x, 0)
-      context.lineTo(x, HEIGHT)
-      context.stroke()
-    })
-  }, [pattern, totalLeds, segments, theme])
+  }, [pattern, totalLeds, segments, width, height, pitch, columns, blocks, labelled])
 
   return (
     <Box>
@@ -68,7 +99,7 @@ export default function PreviewStrip({ pattern, totalLeds, segments, known }) {
         sx={{
           display: 'block',
           width: '100%',
-          height: HEIGHT,
+          height,
           borderRadius: 1.5,
           border: 1,
           borderColor: 'divider',
