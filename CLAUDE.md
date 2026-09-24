@@ -168,6 +168,9 @@ reaches every install. Keep every input pinned:
   unpinned. npm only from `package-lock.json` via `npm ci`.
 - Dependabot (`.github/dependabot.yml`) proposes updates as PRs. When reviewing one, read the
   lock diff; a new version of a small dependency like `xled` deserves a look at what changed.
+  It's set to ignore major versions and new Python/Node versions, and to wait 7 days after a
+  release. Major upgrades (React, MUI, Vite, a new Python) are their own PR with code changes and
+  a minor release. Don't loosen the config to let Dependabot do them.
 
 ## Branches, pull requests and releases
 

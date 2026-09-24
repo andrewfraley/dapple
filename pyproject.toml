@@ -1,6 +1,6 @@
 [project]
 name = "dapple"
-version = "0.4.1"
+version = "0.4.2"
 description = "Static multi-color patterns for Twinkly light strands, with a REST API for Home Assistant"
 requires-python = ">=3.12"
 dependencies = [

@@ -2,12 +2,24 @@
 # Dependabot opens a PR for each update; read the lock diff before merging,
 # since a hash only proves you got the version you asked for, not that the
 # version is safe.
+#
+# These settings shape routine *version* updates only. Security updates
+# ignore `ignore` and `cooldown` and arrive as soon as there's a fix.
+#
+# - cooldown: a new release isn't proposed until it's a week old. Hijacked
+#   packages are usually caught and pulled within days.
+# - Major versions (and new Python/Node releases) are left to a deliberate
+#   upgrade PR: they change APIs and need code changes, not a bot bump.
+# - increase-if-necessary: update the lock file, and leave the version ranges
+#   in pyproject.toml and package.json alone unless an update needs them wider.
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ["*"]
@@ -16,17 +28,38 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+    versioning-strategy: increase-if-necessary
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      python:
+        patterns: ["*"]
 
   - package-ecosystem: npm
     directory: /frontend
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+    versioning-strategy: increase-if-necessary
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
-      # Minor and patch releases together; majors (MUI, React, Vite) one at a time.
-      minor-and-patch:
-        update-types: [minor, patch]
+      frontend:
+        patterns: ["*"]
 
+  # Only new digests for the same tag (a rebuilt python:3.12-slim with OS
+  # fixes). Moving to a new Python or Node version is a deliberate change.
   - package-ecosystem: docker
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
