@@ -75,6 +75,10 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
   // rather than in SlotRow because rows are keyed by index: moving a color must
   // carry its open state with it, not leave it behind at the old position.
   const [openSlots, setOpenSlots] = useState(() => new Set())
+  // The preset the editor holds, untouched. Every edit builds a new pattern
+  // object, so identity is enough to tell whether Apply is still applying that
+  // preset, and the group's state can name it rather than "a custom pattern".
+  const [fromPreset, setFromPreset] = useState(null)
 
   const group = groups.find((candidate) => candidate.id === groupId) || null
   const known = Boolean(group && group.segments.length)
@@ -102,6 +106,9 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
     const current = groups.find((candidate) => candidate.id === groupId)
     setPattern(current?.state?.pattern ?? STARTING_PATTERN)
     setSelected(current?.state?.preset ?? '')
+    // Not the preset it was applied from: that preset may have been edited since,
+    // and applying by name would send its new colors, not the ones on screen.
+    setFromPreset(null)
     setStatus(null)
     setOpenSlots(new Set())
   }, [groupId, groups])
@@ -206,23 +213,25 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
   }
 
   const onApply = () =>
-    run(`Applied to ${group.name}`, () => api.applyToGroup(groupId, pattern).then(after))
+    fromPreset?.pattern === pattern
+      ? run(`Applied “${fromPreset.name}” to ${group.name}`, () =>
+          api.applyPresetToGroup(groupId, fromPreset.name).then(after),
+        )
+      : run(`Applied to ${group.name}`, () => api.applyToGroup(groupId, pattern).then(after))
 
   const onLoadPreset = () => {
     const preset = presets[selected]
     if (!preset) return
-    setPattern({ brightness: 60, ...preset })
+    const next = { brightness: 60, ...preset }
+    setPattern(next)
+    setFromPreset({ name: selected, pattern: next })
     setOpenSlots(new Set())
     setStatus({ severity: 'info', text: `Loaded “${selected}” — not applied yet` })
   }
 
-  const onApplyPreset = () =>
-    run(`Applied “${selected}” to ${group.name}`, () =>
-      api.applyPresetToGroup(groupId, selected).then(after),
-    )
-
   const onDeletePreset = async () => {
     await run(`Deleted “${selected}”`, () => api.deletePreset(selected))
+    if (fromPreset?.name === selected) setFromPreset(null)
     setSelected('')
     loadPresets()
   }
@@ -231,7 +240,8 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
     const name = saveName.trim()
     if (!name) return
     setSaveOpen(false)
-    await run(`Saved “${name}”`, () => api.savePreset(name, pattern))
+    const saved = await run(`Saved “${name}”`, () => api.savePreset(name, pattern))
+    if (saved) setFromPreset({ name, pattern })
     setSelected(name)
     loadPresets()
   }
@@ -426,41 +436,6 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
         <Card variant="outlined">
           <CardContent>
             <Stack spacing={2}>
-              <Stack
-                direction={{ xs: 'column', sm: 'row' }}
-                spacing={1.5}
-                alignItems={{ sm: 'center' }}
-              >
-                <FormControl size="small" sx={{ minWidth: 200, flex: 1 }}>
-                  <InputLabel id="preset-label">Preset</InputLabel>
-                  <Select
-                    labelId="preset-label"
-                    label="Preset"
-                    value={selected}
-                    onChange={(event) => setSelected(event.target.value)}
-                  >
-                    {Object.keys(presets)
-                      .sort()
-                      .map((name) => (
-                        <MenuItem key={name} value={name}>
-                          {name}
-                        </MenuItem>
-                      ))}
-                  </Select>
-                </FormControl>
-                <Button onClick={onLoadPreset} disabled={!selected}>
-                  Load
-                </Button>
-                <Button onClick={onApplyPreset} disabled={!selected || busy || !group}>
-                  Apply preset
-                </Button>
-                <Button color="error" onClick={onDeletePreset} disabled={!selected || busy}>
-                  Delete
-                </Button>
-              </Stack>
-
-              <Divider />
-
               <Stack direction="row" spacing={1.5}>
                 <Button
                   variant="contained"
@@ -487,6 +462,38 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
                   ? 'Every color is at 0% — give at least one of them a share.'
                   : 'Presets are shared across groups — apply the same one anywhere.'}
               </Typography>
+
+              <Divider />
+
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={1.5}
+                alignItems={{ sm: 'center' }}
+              >
+                <FormControl size="small" sx={{ minWidth: 200, flex: 1 }}>
+                  <InputLabel id="preset-label">Preset</InputLabel>
+                  <Select
+                    labelId="preset-label"
+                    label="Preset"
+                    value={selected}
+                    onChange={(event) => setSelected(event.target.value)}
+                  >
+                    {Object.keys(presets)
+                      .sort()
+                      .map((name) => (
+                        <MenuItem key={name} value={name}>
+                          {name}
+                        </MenuItem>
+                      ))}
+                  </Select>
+                </FormControl>
+                <Button onClick={onLoadPreset} disabled={!selected}>
+                  Load
+                </Button>
+                <Button color="error" onClick={onDeletePreset} disabled={!selected || busy}>
+                  Delete
+                </Button>
+              </Stack>
             </Stack>
           </CardContent>
         </Card>

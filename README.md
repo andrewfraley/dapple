@@ -135,10 +135,8 @@ next.
 
 Dapple starts with four: **Halloween**, **Christmas**, **July 4th** and **Warm white**.
 
-To bring one back, pick it from the **Preset** dropdown and click:
-
-- **Load** to put it in the editor so you can adjust it first. Nothing reaches the lights yet.
-- **Apply preset** to send it to the selected group straight away.
+To bring one back, pick it from the **Preset** dropdown and click **Load**. That puts it in the
+editor, so you can adjust it first. Nothing reaches the lights until you click **Apply**.
 
 **Delete** removes a saved preset. It doesn't change what your lights are currently showing.
 
