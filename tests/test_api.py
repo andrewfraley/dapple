@@ -1,5 +1,8 @@
 """The /api surface, against a fake DeviceManager — no strands involved."""
 
+import tomllib
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -263,8 +266,14 @@ def test_ping_answers_without_asking_any_strand(client, manager):
     """It's the container HEALTHCHECK: every 30s, forever."""
     before = list(manager.calls)
 
-    assert client.get("/api/ping").json() == {"ok": True}
+    assert client.get("/api/ping").json() == {"ok": True, "version": app.version}
     assert manager.calls == before
+
+
+def test_the_version_is_the_one_in_pyproject(client):
+    """The footer shows it; a user reporting a bug quotes it."""
+    pyproject = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text())
+    assert client.get("/api/ping").json()["version"] == pyproject["project"]["version"]
 
 
 def test_health(client):

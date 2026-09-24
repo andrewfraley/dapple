@@ -212,10 +212,10 @@ def _response(results) -> ApplyResponse:
 
 @app.get("/api/ping")
 async def ping() -> dict:
-    """Liveness only, for the container HEALTHCHECK. It never touches a strand:
-    polling them every 30s would be traffic for nothing, and an unplugged strand
-    isn't a reason to restart Dapple."""
-    return {"ok": True}
+    """Liveness, for the container HEALTHCHECK, and the version the UI's footer
+    shows. It never touches a strand: polling them every 30s would be traffic
+    for nothing, and an unplugged strand isn't a reason to restart Dapple."""
+    return {"ok": True, "version": VERSION}
 
 
 @app.get("/api/health", response_model=HealthResponse)
