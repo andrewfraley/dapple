@@ -4,7 +4,7 @@
 # ---- build the React UI ----------------------------------------------------
 # The output is static files, so build it natively even for an arm64 image
 # rather than running npm under emulation.
-FROM --platform=$BUILDPLATFORM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS ui
+FROM --platform=$BUILDPLATFORM node:25-alpine@sha256:bdf2cca6fe3dabd014ea60163eca3f0f7015fbd5c7ee1b0e9ccb4ced6eb02ef4 AS ui
 
 WORKDIR /ui
 COPY frontend/package.json frontend/package-lock.json* ./
