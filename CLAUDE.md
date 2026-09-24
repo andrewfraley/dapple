@@ -183,6 +183,20 @@ reaches every install. Keep every input pinned:
   *Releases* section has the details.
 - Release notes are for people running Dapple, in the voice of README.md: what changed for them
   and how to upgrade. They're not a commit log. See `docs/releases/` for the shape.
+- **Every PR you open is a release.** Bump the version as part of it and add its notes, even when
+  the change is small. A merge without a new version doesn't reach users at all (only a release
+  moves `latest`), so an unreleased fix just sits there. Before 1.0:
+  - **Patch** (`0.4.0` → `0.4.1`): fixes, hardening, dependency updates, docs. Anything a user
+    doesn't have to act on.
+  - **Minor** (`0.4.1` → `0.5.0`): new features, and anything users must act on or that breaks
+    something: a config key renamed, a REST route changed, a behavior people relied on removed.
+    The notes must say what to do.
+  - Bump from the latest *tag*, not from what another open PR claims. If two release PRs are
+    open, the second to merge has to rebase and take the next number.
+- Dependabot's PRs can't bump the version or write notes, so they merge without a release. That
+  is safe because only a release moves `latest`. When asked for a release, cover every Dependabot
+  merge since the last tag (`git log v<last>..main`) and mention any that users would notice. After
+  a Dependabot *security* update is merged, suggest a patch release rather than waiting.
 
 ## Gotchas
 
@@ -197,7 +211,7 @@ reaches every install. Keep every input pinned:
   homelab users already know; only the override reads `DAPPLE_PORT`.
 - The repo is public on GitHub (`andrewfraley/dapple`); the image is `afraley/dapple` on Docker Hub,
   published by `.github/workflows/docker.yml`. Every branch push publishes
-  `afraley/dapple:<branch>` for testing on the real strands; only main moves `latest`.
+  `afraley/dapple:<branch>` for testing on the real strands. Only a release moves `latest`.
   `docker-compose.yml` must stay usable on its own (users download only that file), so anything
   that needs the source goes in the override.
   Check `git status` before committing:
