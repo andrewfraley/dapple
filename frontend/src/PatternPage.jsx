@@ -34,6 +34,8 @@ const FALLBACK_LEDS = 200
 const TABS_UP_TO = 4
 /** How often the strands are re-read while the page is open and visible. */
 const LIVE_POLL_MS = 5000
+/** For a pattern that doesn't say: a preset saved without one, or a new pattern. */
+const DEFAULT_BRIGHTNESS = 60
 
 const STARTING_PATTERN = {
   slots: [
@@ -42,7 +44,7 @@ const STARTING_PATTERN = {
   ],
   layout: 'interleaved',
   block_size: 1,
-  brightness: 60,
+  brightness: DEFAULT_BRIGHTNESS,
 }
 
 const NEW_SLOT_COLORS = [
@@ -296,7 +298,7 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
   const onLoadPreset = () => {
     const preset = presets[selected]
     if (!preset) return
-    const next = { brightness: 60, ...preset }
+    const next = { brightness: DEFAULT_BRIGHTNESS, ...preset }
     setPattern(next)
     setFromPreset({ name: selected, pattern: next })
     setOpenSlots(new Set())
@@ -497,9 +499,11 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
               </Stack>
 
               <Box>
-                <Typography variant="caption">Brightness — {pattern.brightness ?? 60}%</Typography>
+                <Typography variant="caption">
+                  Brightness — {pattern.brightness ?? DEFAULT_BRIGHTNESS}%
+                </Typography>
                 <Slider
-                  value={pattern.brightness ?? 60}
+                  value={pattern.brightness ?? DEFAULT_BRIGHTNESS}
                   min={0}
                   max={100}
                   valueLabelDisplay="auto"
