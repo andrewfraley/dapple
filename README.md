@@ -36,12 +36,12 @@ or your router's device list will have it. It looks like `192.168.1.50`.
 Open a terminal, then copy and paste these three lines one at a time:
 
 ```bash
-git clone <this repo> dapple
+git clone https://github.com/andrewfraley/dapple.git
 cd dapple
-docker compose up -d --build
+docker compose up -d
 ```
 
-The last one takes a few minutes the first time. When it finishes, open
+The last one downloads Dapple, which takes a minute the first time. When it finishes, open
 **<http://localhost:8080>** in your browser.
 
 Running it on a different machine from the one you're browsing on? Use that machine's address
@@ -200,7 +200,7 @@ Everything Dapple remembers lives in the `data` folder next to `docker-compose.y
 Back up that folder and you've backed up everything. It's all plain text, so you can read and
 edit it if you want to.
 
-To update Dapple later: `git pull` then `docker compose up -d --build`. Your `data` folder is
+To update Dapple later: `docker compose pull` then `docker compose up -d`. Your `data` folder is
 left alone.
 
 To stop it: `docker compose down`. To start it again: `docker compose up -d`.

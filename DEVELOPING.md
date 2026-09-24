@@ -268,3 +268,19 @@ use.
 
 **Two groups with the same pattern look offset from each other** — they shouldn't. Every group
 starts at its own LED 0. That's a bug.
+
+---
+
+## Releases
+
+`.github/workflows/docker.yml` runs the Python and JS tests, then builds a `linux/amd64` +
+`linux/arm64` image. Pull requests only build it. Pushes publish it to Docker Hub:
+
+| Push | Tags |
+|---|---|
+| `main` | `latest`, `sha-<commit>` |
+| tag `v1.2.3` | `1.2.3`, `1.2`, `sha-<commit>` |
+
+Publishing needs a repository **variable** `DOCKERHUB_USERNAME` and a **secret** `DOCKERHUB_TOKEN`
+(a Docker Hub access token with read/write scope). Without them the workflow still builds and
+simply skips the push.
