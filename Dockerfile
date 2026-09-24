@@ -9,6 +9,16 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
+# ---- pinned dependencies ---------------------------------------------------
+# uv.lock turned into a plain requirements file with hashes, so the runtime
+# image installs exactly what CI tested and doesn't need uv itself. The lock
+# covers every platform, so this only runs once.
+FROM --platform=$BUILDPLATFORM python:3.12-slim AS lock
+
+RUN pip install --no-cache-dir uv==0.12.9
+COPY pyproject.toml uv.lock ./
+RUN uv export --frozen --no-emit-project --no-dev -o /requirements.txt
+
 # ---- runtime ---------------------------------------------------------------
 FROM python:3.12-slim
 
@@ -18,9 +28,12 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /srv
 
+# Dependencies before the app, so a code change doesn't reinstall them.
+COPY --from=lock /requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 COPY pyproject.toml ./
 COPY app/ ./app/
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir --no-deps .
 
 COPY --from=ui /ui/dist/ ./static/
 

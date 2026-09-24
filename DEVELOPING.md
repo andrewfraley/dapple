@@ -19,7 +19,7 @@ scripts/smoke.py  one strand, one pattern, from the command line
 ## Running from source
 
 ```bash
-uv venv && uv pip install -e ".[dev]"
+uv sync --extra dev                        # .venv, pinned to uv.lock, with Dapple itself editable
 .venv/bin/pre-commit install               # Black and Prettier on every commit
 .venv/bin/python -m pytest                 # 329 tests, no network, no strands
 
@@ -29,6 +29,12 @@ npm --prefix frontend run dev              # UI on :5173, proxying /api to :8080
 
 DAPPLE_DATA_DIR=./data .venv/bin/uvicorn app.main:app --reload --port 8080
 ```
+
+`uv.lock` pins every Python dependency. CI and the Docker image both install from it, so what
+the tests ran against is what ships. After changing dependencies in `pyproject.toml`, run
+`uv lock`. To take newer versions, run `uv lock --upgrade`, then run the tests and commit the
+lock. Run `uv sync --extra dev` after a version bump too, because the running app reads its
+version from the installed package.
 
 The API serves the built UI from `static/` (where the Docker image puts it) or `frontend/dist/`,
 whichever exists. With neither, `/` explains what to build and `/docs` still works.
