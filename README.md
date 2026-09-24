@@ -11,6 +11,32 @@ It runs on your own machine. No Twinkly account, no cloud, nothing leaves your h
 Once you apply a pattern, the lights remember it themselves. You can close the page, turn the
 computer off, even unplug the lights and plug them back in — the colors come back.
 
+## Features
+
+- **Multi-color patterns the Twinkly app can't make.** Pick up to eight colors and how much of
+  the strand each one gets, then mix them evenly or lay them out in blocks.
+- **One pattern across several strands.** Strands wired end to end become one group, and the
+  pattern carries on across the join instead of starting over.
+- **Groups with their own patterns.** Put the tree in one group and the porch in another, and
+  set each one on its own.
+- **A preview that matches the lights.** See the pattern on screen before you send it, with
+  colors corrected so what you see is what the strands show.
+- **Easy color picking.** Choose colors on a rainbow slider. Strands with a separate white
+  bulb get a white slider and a plain warm white. The rest get a slider that lightens toward
+  white.
+- **Saved presets.** Save a look once and put it on any group with one click. Halloween,
+  Christmas, July 4th and Warm white are there from the start.
+- **On, off and brightness for each group**, with a switch that shows whether the lights are
+  really on. It keeps up when you change them from Home Assistant or the Twinkly app.
+- **Home Assistant, with no YAML.** Each group shows up as a light, with your presets as its
+  effects, so dashboards, scenes, automations and voice commands all work. Home Assistant's
+  own Twinkly integration can stay installed alongside Dapple. See
+  [HOME_ASSISTANT.md](HOME_ASSISTANT.md).
+- **Works on a phone** as well as a computer.
+- **Private and simple to run.** It's one Docker container on your own network, with no
+  account and no cloud. Everything it remembers is in one folder of plain text files.
+- **A REST API** for scripts and other tools. See [DEVELOPING.md](DEVELOPING.md).
+
 ---
 
 ## Before you start
