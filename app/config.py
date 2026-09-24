@@ -157,7 +157,7 @@ def slugify(name: str) -> str:
     return slug or "group"
 
 
-def normalize_group_name(name: str | None, fallback: str = "Group") -> str:
+def normalize_group_name(name: str | None) -> str:
     name = (name or "").strip()
     if not name:
         raise ConfigError("A group name is required")
@@ -500,13 +500,10 @@ class ConfigStore:
     def next_name(self) -> str:
         return f"Strand {len(self.devices) + 1}"
 
-    def next_group_name(self) -> str:
-        return f"Group {len(self.config.groups) + 1}"
-
     # ---- groups ------------------------------------------------------------
 
     def create_group(self, name: str) -> GroupConfig:
-        name = normalize_group_name(name, self.next_group_name())
+        name = normalize_group_name(name)
         group = GroupConfig(
             id=unique_group_id(slugify(name), {g.id for g in self.config.groups}),
             name=name,

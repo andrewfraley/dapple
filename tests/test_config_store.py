@@ -432,6 +432,6 @@ def test_a_failed_write_changes_nothing(tmp_path):
 
 
 def test_next_names_count_up(store):
-    assert (store.next_group_name(), store.next_name()) == ("Group 1", "Strand 1")
+    assert store.next_name() == "Strand 1"
     store.add(strand("Tree", "10.0.0.1"))
-    assert (store.next_group_name(), store.next_name()) == ("Group 2", "Strand 2")
+    assert store.next_name() == "Strand 2"
