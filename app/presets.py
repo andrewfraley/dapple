@@ -12,7 +12,7 @@ from app.models import Pattern, Slot
 
 log = logging.getLogger(__name__)
 
-ORANGE = (255, 80, 0, 0)
+ORANGE = (255, 152, 0, 0)
 PURPLE = (128, 0, 255, 0)
 RED = (255, 0, 0, 0)
 GREEN = (0, 200, 0, 0)

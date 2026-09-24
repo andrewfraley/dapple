@@ -33,9 +33,8 @@ const TABS_UP_TO = 4
 
 const STARTING_PATTERN = {
   slots: [
-    { rgbw: [255, 0, 0, 0], weight: 1 },
-    { rgbw: [0, 0, 0, 255], weight: 1 },
-    { rgbw: [0, 0, 255, 0], weight: 1 },
+    { rgbw: [255, 152, 0, 0], weight: 80 },
+    { rgbw: [128, 0, 255, 0], weight: 20 },
   ],
   layout: 'interleaved',
   block_size: 1,
