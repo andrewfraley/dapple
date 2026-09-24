@@ -20,6 +20,7 @@ the API reference and internals. Keep them in their lanes — don't put REST tab
 
 ```bash
 .venv/bin/python -m pytest -q                 # 260 tests, no network, no strands
+.venv/bin/pre-commit run --all-files          # Black + Prettier; the git hook runs this on staged files
 npm --prefix frontend test                    # JS pattern port vs Python fixtures
 npm --prefix frontend run build               # required before the Docker build picks up UI changes
 docker compose up -d --build                  # builds this tree via docker-compose.override.yml; :8081 here
@@ -93,6 +94,9 @@ HA automations survive a rename.
 
 ## Conventions
 
+- Black formats Python and Prettier formats `frontend/`, both at 100 columns, via the
+  pre-commit hook. CI fails on unformatted files. Don't hand-format around them, and don't run
+  Prettier with ad-hoc flags: `frontend/.prettierrc.json` holds the settings.
 - Tests are named as sentences about behavior (`test_two_groups_with_one_pattern_both_start_at_the_beginning`),
   and docstrings say *why the case matters*, not what the code does.
 - Fakes over mocks: `FakeControl` (records xled calls, `fail_once` for retry paths),

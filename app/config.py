@@ -233,10 +233,7 @@ def _flat_devices_from_yaml(document: dict) -> list[DeviceConfig]:
     entries = document.get("devices") or []
     if not isinstance(entries, list):
         raise ValueError("config.yaml: 'devices' must be a list")
-    return [
-        _device_from_yaml(entry, "top-level", index)
-        for index, entry in enumerate(entries, 1)
-    ]
+    return [_device_from_yaml(entry, "top-level", index) for index, entry in enumerate(entries, 1)]
 
 
 def load_config(
@@ -473,9 +470,7 @@ class ConfigStore:
             groups = [
                 *self.groups,
                 GroupConfig(
-                    id=unique_group_id(
-                        slugify(device.name), {g.id for g in self.config.groups}
-                    ),
+                    id=unique_group_id(slugify(device.name), {g.id for g in self.config.groups}),
                     name=device.name,
                     devices=[device],
                 ),
@@ -486,9 +481,7 @@ class ConfigStore:
         self.find_group(group_id)
         self._commit(
             [
-                replace(group, devices=[*group.devices, device])
-                if group.id == group_id
-                else group
+                replace(group, devices=[*group.devices, device]) if group.id == group_id else group
                 for group in self.config.groups
             ]
         )
@@ -500,15 +493,17 @@ class ConfigStore:
         self._check_free(device.host, ignoring=host)
         self._commit(
             [
-                replace(
-                    group,
-                    devices=[
-                        device if existing.host == host else existing
-                        for existing in group.devices
-                    ],
+                (
+                    replace(
+                        group,
+                        devices=[
+                            device if existing.host == host else existing
+                            for existing in group.devices
+                        ],
+                    )
+                    if any(existing.host == host for existing in group.devices)
+                    else group
                 )
-                if any(existing.host == host for existing in group.devices)
-                else group
                 for group in self.config.groups
             ]
         )
@@ -518,9 +513,7 @@ class ConfigStore:
         self.find(host)
         self._commit(
             [
-                replace(
-                    group, devices=[d for d in group.devices if d.host != host]
-                )
+                replace(group, devices=[d for d in group.devices if d.host != host])
                 for group in self.config.groups
             ]
         )
@@ -551,9 +544,11 @@ class ConfigStore:
         by_host = {device.host: device for device in group.devices}
         self._commit(
             [
-                replace(existing, devices=[by_host[host] for host in hosts])
-                if existing.id == group_id
-                else existing
+                (
+                    replace(existing, devices=[by_host[host] for host in hosts])
+                    if existing.id == group_id
+                    else existing
+                )
                 for existing in self.config.groups
             ]
         )

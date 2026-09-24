@@ -127,9 +127,7 @@ export default function SlotRow({
       >
         <Box>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Typography variant="caption">
-              Color
-            </Typography>
+            <Typography variant="caption">Color</Typography>
             {hasWhite && (
               <FormControlLabel
                 sx={{ mr: 0 }}
@@ -206,9 +204,7 @@ function LabeledSlider({ label, value, max, step = 1, onChange, ariaLabel }) {
     <Box>
       {/* Matches the checkbox row beside the hue slider so the tracks line up. */}
       <Box sx={{ minHeight: { md: 38 }, display: 'flex', alignItems: 'center' }}>
-        <Typography variant="caption">
-          {label}
-        </Typography>
+        <Typography variant="caption">{label}</Typography>
       </Box>
       <Slider
         value={value}

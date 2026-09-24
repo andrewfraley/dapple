@@ -239,11 +239,7 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
                   scrollButtons="auto"
                 >
                   {groups.map((candidate) => (
-                    <Tab
-                      key={candidate.id}
-                      value={candidate.id}
-                      label={candidate.name}
-                    />
+                    <Tab key={candidate.id} value={candidate.id} label={candidate.name} />
                   ))}
                 </Tabs>
               ) : (
@@ -324,7 +320,11 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
         <Card variant="outlined">
           <CardContent>
             <Stack spacing={2.5}>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'center' }}>
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={2}
+                alignItems={{ sm: 'center' }}
+              >
                 <ToggleButtonGroup
                   size="small"
                   exclusive
@@ -356,9 +356,7 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
               </Stack>
 
               <Box>
-                <Typography variant="caption">
-                  Brightness — {pattern.brightness ?? 60}%
-                </Typography>
+                <Typography variant="caption">Brightness — {pattern.brightness ?? 60}%</Typography>
                 <Slider
                   value={pattern.brightness ?? 60}
                   min={0}
@@ -379,14 +377,18 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
               <Stack direction="row" spacing={1.5}>
                 <Button
                   variant="outlined"
-                  onClick={() => run(`${group.name} on`, () => api.turnGroupOn(groupId).then(after))}
+                  onClick={() =>
+                    run(`${group.name} on`, () => api.turnGroupOn(groupId).then(after))
+                  }
                   disabled={busy}
                 >
                   On
                 </Button>
                 <Button
                   variant="outlined"
-                  onClick={() => run(`${group.name} off`, () => api.turnGroupOff(groupId).then(after))}
+                  onClick={() =>
+                    run(`${group.name} off`, () => api.turnGroupOff(groupId).then(after))
+                  }
                   disabled={busy}
                 >
                   Off
@@ -399,7 +401,11 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
         <Card variant="outlined">
           <CardContent>
             <Stack spacing={2}>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={1.5}
+                alignItems={{ sm: 'center' }}
+              >
                 <FormControl size="small" sx={{ minWidth: 200, flex: 1 }}>
                   <InputLabel id="preset-label">Preset</InputLabel>
                   <Select
@@ -408,11 +414,13 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
                     value={selected}
                     onChange={(event) => setSelected(event.target.value)}
                   >
-                    {Object.keys(presets).sort().map((name) => (
-                      <MenuItem key={name} value={name}>
-                        {name}
-                      </MenuItem>
-                    ))}
+                    {Object.keys(presets)
+                      .sort()
+                      .map((name) => (
+                        <MenuItem key={name} value={name}>
+                          {name}
+                        </MenuItem>
+                      ))}
                   </Select>
                 </FormControl>
                 <Button onClick={onLoadPreset} disabled={!selected}>

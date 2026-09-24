@@ -123,9 +123,7 @@ def led_colors(
     slots = active_slots(pattern)
     if not slots:
         return [BLACK] * num_leds
-    sequence = build_sequence(
-        [slot.weight for slot in slots], pattern.layout, pattern.block_size
-    )
+    sequence = build_sequence([slot.weight for slot in slots], pattern.layout, pattern.block_size)
     if not sequence:
         return [BLACK] * num_leds
     colors = [tuple(slot.rgbw) for slot in slots]
@@ -149,9 +147,7 @@ def pack(
     """
     table = gamma_table(gamma)
     if led_profile == "RGBW":
-        return bytes(
-            table[byte] for r, g, b, w in colors for byte in (w, r, g, b)
-        )
+        return bytes(table[byte] for r, g, b, w in colors for byte in (w, r, g, b))
     if led_profile == "RGB":
         return bytes(table[byte] for r, g, b, _w in colors for byte in (r, g, b))
     raise ValueError(f"unknown led_profile: {led_profile!r}")

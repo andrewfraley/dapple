@@ -113,7 +113,9 @@ def test_no_config_at_all_is_not_fatal(tmp_path):
 
 
 def test_a_group_without_an_id_gets_one_from_its_name(tmp_path):
-    write_config(tmp_path, "groups:\n  - name: Front Porch!\n    strands:\n      - host: 10.0.0.1\n")
+    write_config(
+        tmp_path, "groups:\n  - name: Front Porch!\n    strands:\n      - host: 10.0.0.1\n"
+    )
 
     assert load_config(tmp_path, env={}).groups[0].id == "front-porch"
 
@@ -151,9 +153,7 @@ def test_a_host_in_two_groups_keeps_the_first(tmp_path):
 @pytest.mark.parametrize("reserved", ["order", "all"])
 def test_a_reserved_group_id_in_the_file_is_reslugged(tmp_path, reserved):
     """A group called 'order' would be shadowed by /api/config/groups/order."""
-    write_config(
-        tmp_path, f"groups:\n  - id: {reserved}\n    strands:\n      - host: 10.0.0.1\n"
-    )
+    write_config(tmp_path, f"groups:\n  - id: {reserved}\n    strands:\n      - host: 10.0.0.1\n")
 
     assert load_config(tmp_path, env={}).groups[0].id == f"{reserved}-group"
 

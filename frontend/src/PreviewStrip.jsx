@@ -80,7 +80,7 @@ export default function PreviewStrip({ pattern, totalLeds, segments, known }) {
       for (let led = 0; led < segment.number_of_led; led++) {
         const color = leds[segment.offset + led]
         const lit = color && color.some((channel) => channel > 0)
-        const x = PADDING + (led % columns + 0.5) * pitch
+        const x = PADDING + ((led % columns) + 0.5) * pitch
         const y = top + (Math.floor(led / columns) + 0.5) * pitch
         context.beginPath()
         if (lit) {

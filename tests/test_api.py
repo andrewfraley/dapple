@@ -37,8 +37,7 @@ class FakeGroup:
         self.id = id
         self.name = name
         self.devices = [
-            device if isinstance(device, FakeDevice) else FakeDevice(*device)
-            for device in devices
+            device if isinstance(device, FakeDevice) else FakeDevice(*device) for device in devices
         ]
 
     def total_leds(self):
@@ -81,9 +80,11 @@ class FakeManager:
         self.calls = []
         self.synced = 0
         self.probed = []
-        self.groups = groups if groups is not None else [
-            FakeGroup("tree", "Tree", [("10.0.0.1", 105), ("10.0.0.2", 100)])
-        ]
+        self.groups = (
+            groups
+            if groups is not None
+            else [FakeGroup("tree", "Tree", [("10.0.0.1", 105), ("10.0.0.2", 100)])]
+        )
 
     # -- what the routes use --
     @property
@@ -107,10 +108,7 @@ class FakeManager:
                 FakeGroup(
                     group.id,
                     group.name,
-                    [
-                        FakeDevice(d.host, d.number_of_led or 105, d.name)
-                        for d in group.devices
-                    ],
+                    [FakeDevice(d.host, d.number_of_led or 105, d.name) for d in group.devices],
                 )
                 for group in self.store.groups
             ]
@@ -136,17 +134,26 @@ class FakeManager:
     async def health(self):
         self.calls.append("health")
         return [
-            DeviceResult(name=device.name, host=device.host, ok=not self.fail,
-                         error="boom" if self.fail else None)
+            DeviceResult(
+                name=device.name,
+                host=device.host,
+                ok=not self.fail,
+                error="boom" if self.fail else None,
+            )
             for device in self.devices
         ]
 
     async def info(self, with_live_state=False):
         self.calls.append("info")
         return [
-            DeviceInfo(name=device.name, host=device.host, group=group.id,
-                       reachable=True, number_of_led=device.number_of_led,
-                       led_profile="RGBW")
+            DeviceInfo(
+                name=device.name,
+                host=device.host,
+                group=group.id,
+                reachable=True,
+                number_of_led=device.number_of_led,
+                led_profile="RGBW",
+            )
             for group in self.groups
             for device in group.devices
         ]
@@ -372,10 +379,7 @@ def test_applying_a_preset_records_its_name(client):
 
 def test_a_preset_name_with_a_space(client):
     """Names travel in the body precisely so spaces aren't a path-encoding problem."""
-    assert (
-        client.post("/api/groups/tree/preset", json={"name": "Warm white"}).status_code
-        == 200
-    )
+    assert client.post("/api/groups/tree/preset", json={"name": "Warm white"}).status_code == 200
 
 
 def test_applying_an_unknown_preset(client, manager):
@@ -416,10 +420,7 @@ def test_brightness_updates_the_recorded_pattern(client):
 
 @pytest.mark.parametrize("value", [-1, 101, "high"])
 def test_brightness_rejects_out_of_range(client, value):
-    assert (
-        client.post("/api/groups/tree/brightness", json={"value": value}).status_code
-        == 422
-    )
+    assert client.post("/api/groups/tree/brightness", json={"value": value}).status_code == 422
 
 
 def test_on_and_off(client, manager):
@@ -614,12 +615,13 @@ def test_move_a_strand_between_groups(client):
     add(client, "10.0.0.1", name="Tree")
     add(client, "10.0.0.2", name="Porch")
 
-    body = client.put(
-        "/api/config/strands/10.0.0.2/group", json={"group": "tree"}
-    ).json()
+    body = client.put("/api/config/strands/10.0.0.2/group", json={"group": "tree"}).json()
 
     assert body["group"] == "tree"
-    groups = {g["id"]: [s["host"] for s in g["strands"]] for g in client.get("/api/config").json()["groups"]}
+    groups = {
+        g["id"]: [s["host"] for s in g["strands"]]
+        for g in client.get("/api/config").json()["groups"]
+    }
     assert groups == {"tree": ["10.0.0.1", "10.0.0.2"], "porch": []}
 
 
@@ -638,8 +640,7 @@ def test_move_to_an_unknown_group_is_404(client):
     add(client, "10.0.0.1")
 
     assert (
-        client.put("/api/config/strands/10.0.0.1/group", json={"group": "nope"}).status_code
-        == 404
+        client.put("/api/config/strands/10.0.0.1/group", json={"group": "nope"}).status_code == 404
     )
 
 
@@ -661,9 +662,7 @@ def test_a_partial_reorder_within_a_group_is_refused(client):
     add(client, "10.0.0.1", group="tree")
     add(client, "10.0.0.2", group="tree")
 
-    response = client.put(
-        "/api/config/groups/tree/strands/order", json={"hosts": ["10.0.0.1"]}
-    )
+    response = client.put("/api/config/groups/tree/strands/order", json={"hosts": ["10.0.0.1"]})
 
     assert response.status_code == 400
     assert "exactly once" in response.json()["detail"]

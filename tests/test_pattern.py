@@ -182,7 +182,7 @@ def test_gamma_1_is_a_no_op():
 def test_orange_does_not_reach_the_strand_as_yellow():
     """#FF5000 is sRGB; sent raw it drives 4x the green it should and reads as
     yellow on the strand. Decoding to linear PWM is what fixes it."""
-    (_w, red, green, _blue) = pack([(255, 80, 0, 0)], "RGBW")
+    _w, red, green, _blue = pack([(255, 80, 0, 0)], "RGBW")
 
     assert red == 255
     assert green == 20
@@ -238,11 +238,7 @@ def test_two_strands_join_seamlessly():
 def test_two_strands_join_seamlessly_blocked():
     blocked = pattern((RED, 2), (GREEN, 1), layout="blocked", block_size=4)
     whole = build_frame(blocked, 205, "RGB")
-    assert (
-        build_frame(blocked, 105, "RGB")
-        + build_frame(blocked, 100, "RGB", offset=105)
-        == whole
-    )
+    assert build_frame(blocked, 105, "RGB") + build_frame(blocked, 100, "RGB", offset=105) == whole
 
 
 def test_offset_larger_than_the_unit_wraps():

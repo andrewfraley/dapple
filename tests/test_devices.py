@@ -15,7 +15,9 @@ from app.models import Pattern, Slot
 
 from app.pattern import DEFAULT_GAMMA as DEFAULT_GAMMA_FOR_TESTS, build_frame
 
-PATTERN = Pattern(slots=[Slot(rgbw=(255, 80, 0, 0), weight=4), Slot(rgbw=(128, 0, 255, 0), weight=1)])
+PATTERN = Pattern(
+    slots=[Slot(rgbw=(255, 80, 0, 0), weight=4), Slot(rgbw=(128, 0, 255, 0), weight=1)]
+)
 
 
 class FakeControl:
@@ -396,9 +398,7 @@ def test_two_groups_with_one_pattern_both_start_at_the_beginning():
     assert build_frame(PATTERN, 103, "RGBW", offset=203) != build_frame(
         PATTERN, 103, "RGBW"
     ), "test lengths must not be a whole number of pattern cycles"
-    assert frames_of(manager.groups[1])[0] != build_frame(
-        PATTERN, 103, "RGBW", offset=203
-    )
+    assert frames_of(manager.groups[1])[0] != build_frame(PATTERN, 103, "RGBW", offset=203)
 
 
 def test_applying_to_one_group_leaves_the_others_alone():
@@ -445,9 +445,7 @@ def test_editing_a_strand_rebuilds_only_that_device():
     manager = make_manager([105, 100])
     untouched = manager.groups[0].devices[1]
 
-    manager.config.groups[0].devices[0] = DeviceConfig(
-        name="Renamed", host="10.0.0.0"
-    )
+    manager.config.groups[0].devices[0] = DeviceConfig(name="Renamed", host="10.0.0.0")
     manager.sync()
 
     assert manager.groups[0].devices[0] is not untouched
@@ -583,9 +581,7 @@ def test_uploaded_frames_are_gamma_corrected():
     yellow on the tree."""
     manager = make_manager([1], gamma=2.2)
 
-    asyncio.run(
-        manager.apply_pattern("g0", Pattern(slots=[Slot(rgbw=(255, 80, 0, 0), weight=1)]))
-    )
+    asyncio.run(manager.apply_pattern("g0", Pattern(slots=[Slot(rgbw=(255, 80, 0, 0), weight=1)])))
 
     assert manager.groups[0].devices[0]._control.movies[-1] == bytes([0, 255, 20, 0])
 
@@ -593,8 +589,6 @@ def test_uploaded_frames_are_gamma_corrected():
 def test_gamma_1_sends_values_through_untouched():
     manager = make_manager([1], gamma=1.0)
 
-    asyncio.run(
-        manager.apply_pattern("g0", Pattern(slots=[Slot(rgbw=(255, 80, 0, 0), weight=1)]))
-    )
+    asyncio.run(manager.apply_pattern("g0", Pattern(slots=[Slot(rgbw=(255, 80, 0, 0), weight=1)])))
 
     assert manager.groups[0].devices[0]._control.movies[-1] == bytes([0, 255, 80, 0])

@@ -132,8 +132,7 @@ export default function StrandsPage({ groups: status, onChanged }) {
     }
   }
 
-  const removeGroup = (group) =>
-    run(`Deleted “${group.name}”`, () => api.deleteGroup(group.id))
+  const removeGroup = (group) => run(`Deleted “${group.name}”`, () => api.deleteGroup(group.id))
 
   const moveGroup = (index, delta) => {
     const ids = config.groups.map((group) => group.id)
@@ -153,8 +152,8 @@ export default function StrandsPage({ groups: status, onChanged }) {
       )}
       {config.writable && !config.state_writable && (
         <Alert severity="warning">
-          Each group's last-applied pattern can't be saved, so the editor won't remember what
-          a group is showing after a restart. Applying still works.
+          Each group's last-applied pattern can't be saved, so the editor won't remember what a
+          group is showing after a restart. Applying still works.
         </Alert>
       )}
 
@@ -178,8 +177,8 @@ export default function StrandsPage({ groups: status, onChanged }) {
 
       {config.groups.length === 0 ? (
         <Alert severity="info">
-          No strands yet. Add one by hostname or IP address — it gets a group of its own, and
-          you can move it in with others later.
+          No strands yet. Add one by hostname or IP address — it gets a group of its own, and you
+          can move it in with others later.
           <Box sx={{ mt: 1.5 }}>
             <Button
               variant="contained"

@@ -48,13 +48,13 @@ export default function GroupDialog({ open, group, busy, error, onClose, onSave 
           <Typography variant="caption" color="text.secondary">
             {group ? (
               <>
-                Its id stays <code>{group.id}</code>, so anything already pointing at this
-                group keeps working.
+                Its id stays <code>{group.id}</code>, so anything already pointing at this group
+                keeps working.
               </>
             ) : (
               <>
-                Addressed as <code>{previewId(name)}</code> by the API and Home Assistant.
-                That id is permanent; the name isn’t.
+                Addressed as <code>{previewId(name)}</code> by the API and Home Assistant. That id
+                is permanent; the name isn’t.
               </>
             )}
           </Typography>

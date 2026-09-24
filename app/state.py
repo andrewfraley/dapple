@@ -66,17 +66,13 @@ class StateStore:
 
     # ---- writing -----------------------------------------------------------
 
-    def record(
-        self, group_id: str, pattern: Pattern, preset: str | None = None
-    ) -> GroupState:
+    def record(self, group_id: str, pattern: Pattern, preset: str | None = None) -> GroupState:
         """Remember the pattern just applied to a group.
 
         Recorded even when some strands failed: some of them did change, and the
         per-device results in the response are the truth about which.
         """
-        state = GroupState(
-            pattern=pattern, preset=preset, power="on", applied_at=_now()
-        )
+        state = GroupState(pattern=pattern, preset=preset, power="on", applied_at=_now())
         self._state[group_id] = state
         self._save()
         return state
@@ -105,9 +101,7 @@ class StateStore:
         current = self._state.get(group_id)
         if current is None:
             return None
-        state = current.model_copy(
-            update={"power": "on" if on else "off", "applied_at": _now()}
-        )
+        state = current.model_copy(update={"power": "on" if on else "off", "applied_at": _now()})
         self._state[group_id] = state
         self._save()
         return state

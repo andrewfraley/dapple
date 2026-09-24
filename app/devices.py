@@ -220,9 +220,7 @@ class Device:
     def _upload_legacy_api(self, payload: bytes, frames: int) -> None:
         self._call(lambda: self.control.led_reset())
         self._call(
-            lambda: self.control.set_led_movie_config(
-                FRAME_DELAY_MS, frames, self.number_of_led
-            )
+            lambda: self.control.set_led_movie_config(FRAME_DELAY_MS, frames, self.number_of_led)
         )
         self._call(lambda: self.control.set_led_movie_full(io.BytesIO(payload)))
 
@@ -298,9 +296,7 @@ class DeviceGroup:
                 host=device.host,
                 offset=offset,
                 number_of_led=device.number_of_led or 0,
-                led_profile=device.led_profile
-                if device.led_profile in ("RGB", "RGBW")
-                else "RGB",
+                led_profile=device.led_profile if device.led_profile in ("RGB", "RGBW") else "RGB",
             )
             for device, offset in zip(self.devices, self.offsets())
             if device.number_of_led
@@ -334,11 +330,7 @@ class DeviceManager:
         group, so moving a strand between groups doesn't make it log in again —
         a :class:`Device` knows nothing about which group it's in, deliberately.
         """
-        existing = {
-            device.config.host: device
-            for group in self.groups
-            for device in group.devices
-        }
+        existing = {device.config.host: device for group in self.groups for device in group.devices}
         groups = []
         for group_config in self.config.groups:
             devices = []
@@ -418,24 +410,14 @@ class DeviceManager:
 
     async def info(self, with_live_state: bool = False) -> list[DeviceInfo]:
         infos = await asyncio.gather(
-            *(
-                asyncio.to_thread(device.info, with_live_state)
-                for device in self.devices
-            )
+            *(asyncio.to_thread(device.info, with_live_state) for device in self.devices)
         )
         return self._with_groups(infos)
 
     def _with_groups(self, infos: Sequence[DeviceInfo]) -> list[DeviceInfo]:
         """Tag each strand with the group it belongs to, for the Strands page."""
-        group_of = {
-            device.host: group.id
-            for group in self.groups
-            for device in group.devices
-        }
-        return [
-            info.model_copy(update={"group": group_of.get(info.host)})
-            for info in infos
-        ]
+        group_of = {device.host: group.id for group in self.groups for device in group.devices}
+        return [info.model_copy(update={"group": group_of.get(info.host)}) for info in infos]
 
     async def health(self) -> list[DeviceResult]:
         def check(device: Device) -> None:

@@ -85,10 +85,7 @@ export function ledColors(pattern, numLeds, offset = 0) {
   if (!sequence.length) return Array.from({ length: numLeds }, () => BLACK)
   const colors = slots.map((slot) => slot.rgbw)
   const length = sequence.length
-  return Array.from(
-    { length: numLeds },
-    (_, i) => colors[sequence[(i + offset) % length]],
-  )
+  return Array.from({ length: numLeds }, (_, i) => colors[sequence[(i + offset) % length]])
 }
 
 /** How an RGBW value looks on screen: the white channel washes the color out. */

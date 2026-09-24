@@ -23,9 +23,7 @@ BLUE = (0, 0, 255, 0)
 def default_presets() -> dict[str, Pattern]:
     """Seeded on first run so the UI is useful before anything is saved."""
     return {
-        "Halloween": Pattern(
-            slots=[Slot(rgbw=ORANGE, weight=4), Slot(rgbw=PURPLE, weight=1)]
-        ),
+        "Halloween": Pattern(slots=[Slot(rgbw=ORANGE, weight=4), Slot(rgbw=PURPLE, weight=1)]),
         "Christmas": Pattern(
             slots=[
                 Slot(rgbw=RED, weight=2),
@@ -113,9 +111,7 @@ class PresetStore:
 
     def _write_atomically(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            name: pattern.model_dump() for name, pattern in sorted(self._presets.items())
-        }
+        payload = {name: pattern.model_dump() for name, pattern in sorted(self._presets.items())}
         handle, temp_path = tempfile.mkstemp(
             dir=str(self.path.parent), prefix=".presets-", suffix=".json"
         )

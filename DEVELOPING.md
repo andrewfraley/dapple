@@ -18,6 +18,7 @@ scripts/smoke.py  one strand, one pattern, from the command line
 
 ```bash
 uv venv && uv pip install -e ".[dev]"
+.venv/bin/pre-commit install               # Black and Prettier on every commit
 .venv/bin/python -m pytest                 # 260 tests, no network, no strands
 
 npm --prefix frontend install
@@ -29,6 +30,11 @@ DAPPLE_DATA_DIR=./data .venv/bin/uvicorn app.main:app --reload --port 8080
 
 The API serves the built UI from `static/` (where the Docker image puts it) or `frontend/dist/`,
 whichever exists. With neither, `/` explains what to build and `/docs` still works.
+
+Python is formatted with Black and `frontend/` with Prettier, both at 100 columns. The
+pre-commit hook formats staged files for you, and CI fails on anything it would have changed.
+`.venv/bin/pre-commit run --all-files` formats the whole tree. The hook brings its own Node for
+Prettier, so it works without npm installed.
 
 `docker-compose.yml` pulls the published image, because that one file is all an end user
 downloads. In a checkout, `docker-compose.override.yml` adds `build: .`, so
@@ -281,7 +287,7 @@ starts at its own LED 0. That's a bug.
 
 ## Releases
 
-`.github/workflows/docker.yml` runs the Python and JS tests, then builds a `linux/amd64` +
+`.github/workflows/docker.yml` checks formatting and runs the Python and JS tests, then builds a `linux/amd64` +
 `linux/arm64` image. Pull requests only build it. Pushes publish it to Docker Hub:
 
 | Push | Tags |

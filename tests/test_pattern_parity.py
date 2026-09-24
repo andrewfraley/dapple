@@ -17,7 +17,12 @@ FIXTURES = Path(__file__).parent / "fixtures" / "pattern_fixtures.json"
 CASES = [
     ("80/20 interleaved", {"slots": [[[255, 80, 0, 0], 80], [[128, 0, 255, 0], 20]]}, 40, 0),
     ("7:3 interleaved", {"slots": [[[255, 0, 0, 0], 7], [[0, 0, 255, 0], 3]]}, 30, 0),
-    ("three colors", {"slots": [[[255, 0, 0, 0], 3], [[0, 255, 0, 0], 2], [[0, 0, 0, 255], 1]]}, 25, 0),
+    (
+        "three colors",
+        {"slots": [[[255, 0, 0, 0], 3], [[0, 255, 0, 0], 2], [[0, 0, 0, 255], 1]]},
+        25,
+        0,
+    ),
     (
         "blocked",
         {"slots": [[[255, 0, 0, 0], 2], [[0, 255, 0, 0], 1]], "layout": "blocked", "block_size": 4},

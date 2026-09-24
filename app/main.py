@@ -92,8 +92,7 @@ async def lifespan(app: FastAPI):
         config.source,
         len(config.devices),
         ", ".join(
-            f"{group.name}: " + ", ".join(d.name for d in group.devices)
-            for group in config.groups
+            f"{group.name}: " + ", ".join(d.name for d in group.devices) for group in config.groups
         )
         or "none",
     )
@@ -145,16 +144,12 @@ async def preset_error_handler(_request: Request, exc: PresetError) -> JSONRespo
 
 
 @app.exception_handler(PresetStorageError)
-async def preset_storage_error_handler(
-    _request: Request, exc: PresetStorageError
-) -> JSONResponse:
+async def preset_storage_error_handler(_request: Request, exc: PresetStorageError) -> JSONResponse:
     return JSONResponse(status_code=500, content={"detail": str(exc)})
 
 
 @app.exception_handler(UnknownGroupError)
-async def unknown_group_handler(
-    _request: Request, exc: UnknownGroupError
-) -> JSONResponse:
+async def unknown_group_handler(_request: Request, exc: UnknownGroupError) -> JSONResponse:
     return JSONResponse(status_code=404, content={"detail": str(exc)})
 
 
@@ -164,9 +159,7 @@ async def config_error_handler(_request: Request, exc: ConfigError) -> JSONRespo
 
 
 @app.exception_handler(ConfigStorageError)
-async def config_storage_error_handler(
-    _request: Request, exc: ConfigStorageError
-) -> JSONResponse:
+async def config_storage_error_handler(_request: Request, exc: ConfigStorageError) -> JSONResponse:
     return JSONResponse(status_code=500, content={"detail": str(exc)})
 
 
@@ -221,9 +214,7 @@ def _group_or_503(request: Request, group_id: str):
     """The group's devices, or a 503 — an empty group has nothing to apply to."""
     group = manager(request).group(group_id)
     if not group.devices:
-        raise HTTPException(
-            status_code=503, detail=f"Group {group.name!r} has no strands"
-        )
+        raise HTTPException(status_code=503, detail=f"Group {group.name!r} has no strands")
     return group
 
 
@@ -238,9 +229,7 @@ async def get_group(request: Request, group_id: str) -> GroupStatus:
 
 
 @app.post("/api/groups/{group_id}/apply", response_model=ApplyResponse)
-async def apply_to_group(
-    request: Request, group_id: str, pattern: Pattern
-) -> ApplyResponse:
+async def apply_to_group(request: Request, group_id: str, pattern: Pattern) -> ApplyResponse:
     group = _group_or_503(request, group_id)
     results = await manager(request).apply_pattern(group.id, pattern)
     group_state(request).record(group.id, pattern)
@@ -295,9 +284,7 @@ async def turn_group_off(request: Request, group_id: str) -> ApplyResponse:
 async def preview(payload: PreviewRequest) -> PreviewResponse:
     """The pattern as LED colors. The UI computes this itself; this endpoint is
     the reference the JS port is tested against."""
-    return PreviewResponse(
-        leds=led_colors(payload.pattern, payload.num_leds, payload.offset)
-    )
+    return PreviewResponse(leds=led_colors(payload.pattern, payload.num_leds, payload.offset))
 
 
 # ---- presets --------------------------------------------------------------
@@ -387,9 +374,7 @@ async def create_group(request: Request, payload: GroupCreate) -> GroupModel:
 
 
 @app.put("/api/config/groups/order", response_model=list[GroupModel])
-async def reorder_groups(
-    request: Request, payload: GroupOrderRequest
-) -> list[GroupModel]:
+async def reorder_groups(request: Request, payload: GroupOrderRequest) -> list[GroupModel]:
     """Display order only — every group starts its pattern at its own first LED.
 
     Declared before ``/{group_id}``: FastAPI matches in declaration order, so
@@ -402,9 +387,7 @@ async def reorder_groups(
 
 
 @app.put("/api/config/groups/{group_id}", response_model=GroupModel)
-async def rename_group(
-    request: Request, group_id: str, payload: GroupRename
-) -> GroupModel:
+async def rename_group(request: Request, group_id: str, payload: GroupRename) -> GroupModel:
     """Renaming never changes the id, so anything addressing this group keeps working."""
     group = strands(request).rename_group(group_id, payload.name)
     await _resync(request)
@@ -419,9 +402,7 @@ async def delete_group(request: Request, group_id: str) -> dict:
     return {"ok": True}
 
 
-@app.put(
-    "/api/config/groups/{group_id}/strands/order", response_model=list[StrandConfig]
-)
+@app.put("/api/config/groups/{group_id}/strands/order", response_model=list[StrandConfig])
 async def reorder_group_strands(
     request: Request, group_id: str, payload: ReorderRequest
 ) -> list[StrandConfig]:
@@ -463,9 +444,7 @@ async def move_strand(
 
 
 @app.put("/api/config/strands/{host}", response_model=StrandConfigResult)
-async def update_strand(
-    request: Request, host: str, strand: StrandConfig
-) -> StrandConfigResult:
+async def update_strand(request: Request, host: str, strand: StrandConfig) -> StrandConfigResult:
     store = strands(request)
     existing = store.find(host)
     updated = store.update(

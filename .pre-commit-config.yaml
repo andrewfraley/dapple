@@ -1,0 +1,20 @@
+# Formats staged files before each commit. Set up once per clone:
+#   .venv/bin/pre-commit install
+# Versions are pinned to match pyproject.toml and frontend/package.json, so the
+# hook, CI and an editor all agree on the output.
+repos:
+  - repo: local
+    hooks:
+      - id: black
+        name: black
+        language: python
+        additional_dependencies: [black==26.5.1]
+        entry: black
+        types: [python]
+      - id: prettier
+        name: prettier
+        language: node
+        additional_dependencies: [prettier@3.9.9]
+        entry: prettier --write --ignore-unknown
+        files: ^frontend/
+        exclude: ^frontend/(dist/|package-lock\.json$)

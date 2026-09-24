@@ -57,7 +57,9 @@ def parse_color(text: str) -> tuple[int, int, int, int]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("host", help="IP address of the strand")
     parser.add_argument(
         "--color",
@@ -83,9 +85,13 @@ def main() -> int:
         default=DEFAULT_GAMMA,
         help=f"sRGB → PWM correction (default {DEFAULT_GAMMA}; 1.0 sends values untouched)",
     )
-    parser.add_argument("--white", action="store_true", help="ignore colors, light the W channel only")
+    parser.add_argument(
+        "--white", action="store_true", help="ignore colors, light the W channel only"
+    )
     parser.add_argument("--off", action="store_true", help="just turn the strand off and exit")
-    parser.add_argument("--dry-run", action="store_true", help="read the strand, build the frame, upload nothing")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="read the strand, build the frame, upload nothing"
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -108,9 +114,13 @@ def main() -> int:
 
     print(f"  name          {info.name}")
     print(f"  LEDs          {info.number_of_led}")
-    print(f"  led_profile   {info.led_profile}  ({'4' if info.led_profile == 'RGBW' else '3'} bytes/LED)")
+    print(
+        f"  led_profile   {info.led_profile}  ({'4' if info.led_profile == 'RGBW' else '3'} bytes/LED)"
+    )
     print(f"  firmware      {info.fw_version}  family {info.fw_family}")
-    print(f"  upload path   {'/movies/* (new)' if device.uses_new_movie_api else '/led/movie/* (legacy)'}")
+    print(
+        f"  upload path   {'/movies/* (new)' if device.uses_new_movie_api else '/led/movie/* (legacy)'}"
+    )
 
     if args.off:
         device.turn_off()
