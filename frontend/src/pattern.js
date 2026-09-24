@@ -97,15 +97,6 @@ export function cssColor([r, g, b, w]) {
   return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`
 }
 
-export function hexToRgb(hex) {
-  const value = hex.replace('#', '')
-  return [
-    parseInt(value.slice(0, 2), 16),
-    parseInt(value.slice(2, 4), 16),
-    parseInt(value.slice(4, 6), 16),
-  ]
-}
-
 export function rgbToHex([r, g, b]) {
   return `#${[r, g, b].map((c) => c.toString(16).padStart(2, '0')).join('')}`
 }

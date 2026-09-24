@@ -43,7 +43,7 @@ const STARTING_PATTERN = {
 
 const NEW_SLOT_COLORS = [
   [0, 160, 255, 0],
-  [0, 200, 60, 0],
+  [0, 255, 77, 0],
   [255, 0, 90, 0],
   [255, 200, 0, 0],
   [160, 0, 255, 0],
@@ -356,7 +356,7 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
               </Stack>
 
               <Box>
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption">
                   Brightness — {pattern.brightness ?? 60}%
                 </Typography>
                 <Slider

@@ -16,6 +16,11 @@ const theme = createTheme({
     // MUI's default of 3 picks white text on the dark-mode error red (3.7:1);
     // 4.5 is the WCAG AA line for normal text and flips it to black.
     contrastThreshold: 4.5,
+    // MUI greys disabled controls to 30% white, about 2.7:1 on this page and
+    // unreadable on a phone outdoors. 55% clears 4.5:1 on the page and on a
+    // disabled contained button, and is still plainly dimmer than live text.
+    text: { disabled: 'rgba(255, 255, 255, 0.55)' },
+    action: { disabled: 'rgba(255, 255, 255, 0.55)' },
   },
   shape: { borderRadius: 10 },
   components: {

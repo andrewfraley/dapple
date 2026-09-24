@@ -107,12 +107,13 @@ lose a strand's address by accident.
 On the **Pattern** tab, pick the group you want at the top (if you only have one, there's
 nothing to pick).
 
-- **Colors** — click a color square to choose a color. The **Share** slider sets how much of the
-  strand that color takes. Shares are relative, so 80 and 20 gives you the same result as 8
-  and 2. Set a share to 0 to park a color without deleting it.
-- **White** — only appears on strands that have a separate white bulb. Slide it up for a softer,
-  washed-out version of the color, or pick black and turn white all the way up for a plain warm
-  white.
+- **Color** — slide along the rainbow to choose a color. Every color here is at full strength;
+  to make it paler, use the slider below it, and to make it dimmer, use **Brightness**.
+- **White** or **Lighten** — makes the color softer and paler. Strands with a separate white
+  bulb get **White**, which mixes that bulb in; tick **White only** for a plain warm white.
+  Strands without one get **Lighten**, which goes all the way to white at the far end.
+- **Share** — how much of the strand that color takes. Shares are relative, so 80 and 20 gives
+  you the same result as 8 and 2. Set a share to 0 to park a color without deleting it.
 - **Add color** — up to eight.
 - **Interleaved or Blocked** — interleaved mixes the colors evenly along the strand. Blocked
   puts them in runs: all the orange, then all the purple, repeating. With Blocked you can set
