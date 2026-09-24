@@ -25,7 +25,7 @@ RUN pip install --no-cache-dir .
 COPY --from=ui /ui/dist/ ./static/
 
 # Starts as root only long enough for the entrypoint to claim /data, then runs
-# as DAPPLE_UID:DAPPLE_GID. The strands are on the LAN; the container only needs /data.
+# as PUID:PGID. The strands are on the LAN; the container only needs /data.
 COPY scripts/entrypoint.sh /usr/local/bin/dapple-entrypoint
 RUN mkdir -p /data
 

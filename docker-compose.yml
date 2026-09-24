@@ -2,11 +2,12 @@ services:
   dapple:
     image: afraley/dapple:latest
     container_name: dapple
-    restart: unless-stopped
-    ports:
-      - "${DAPPLE_PORT:-8080}:8080"
-    volumes:
-      - ./data:/data:z
     environment:
-      DAPPLE_UID: "${DAPPLE_UID:-1000}"
-      DAPPLE_GID: "${DAPPLE_GID:-1000}"
+      - PUID=1000        # on Linux, what `id -u` prints — the owner of ./data
+      - PGID=1000        # on Linux, what `id -g` prints
+      - TZ=Etc/UTC       # e.g. America/Chicago, for log timestamps
+    volumes:
+      - ./data:/data:z   # :z is for SELinux (Fedora, RHEL); ignored everywhere else
+    ports:
+      - 8080:8080
+    restart: unless-stopped

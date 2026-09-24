@@ -4,3 +4,6 @@
 services:
   dapple:
     build: .
+    # Lets a dev instance sit beside a real one: DAPPLE_PORT=8081 in .env.
+    ports: !override
+      - "${DAPPLE_PORT:-8080}:8080"

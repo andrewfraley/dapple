@@ -54,9 +54,8 @@ Running it on a different machine from the one you're browsing on? Use that mach
 instead of `localhost` — for example `http://192.168.1.10:8080`.
 
 > **If the page doesn't load**, something else on that computer may already be using port 8080.
-> Put the line `DAPPLE_PORT=8081` in a file called `.env` inside the `dapple` folder (create the
-> file if it isn't there), run `docker compose up -d` again, and use `:8081` in the address
-> instead.
+> Open `docker-compose.yml` in a text editor, change `8080:8080` to `8081:8080`, run
+> `docker compose up -d` again, and use `:8081` in the address instead.
 
 ---
 
@@ -177,15 +176,9 @@ The strand is under-reporting how many lights it has. The Strands tab shows the 
 reported — if that's wrong, it can be corrected by hand in `data/config.yaml`.
 
 **"The config file can't be written."**
-Dapple can't save to its `data` folder. On Linux, add these two lines to the `.env` file next to
-`docker-compose.yml` (create the file if it isn't there), then run `docker compose up -d`:
-
-```
-DAPPLE_UID=1000
-DAPPLE_GID=1000
-```
-
-Replace both numbers with what `id -u` and `id -g` print when you run them.
+Dapple can't save to its `data` folder. On Linux, run `id -u` and `id -g`, open
+`docker-compose.yml` in a text editor, put those two numbers in place of the `1000`s after
+`PUID=` and `PGID=`, then run `docker compose up -d`.
 
 **Something else.**
 `docker compose logs` prints what Dapple has been doing. Warnings mentioning `401` are normal —

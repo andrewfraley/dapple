@@ -45,7 +45,9 @@ downloads. In a checkout, `docker-compose.override.yml` adds `build: .`, so
 | Data directory | — | `DAPPLE_DATA_DIR` | `/data` |
 | Config file | — | `DAPPLE_CONFIG` | `<data>/config.yaml` |
 | Log level | — | `DAPPLE_LOG_LEVEL` | `INFO` |
-| Host port | — | `DAPPLE_PORT` (compose only) | `8080` |
+| Host port | — | `DAPPLE_PORT` (override only) | `8080` |
+| Run as uid / gid | — | `PUID` / `PGID` | `1000` |
+| Log timezone | — | `TZ` | `Etc/UTC` |
 
 ```yaml
 groups:
@@ -253,7 +255,7 @@ order problem obvious), `--off`, `--dry-run`. `--help` has the rest.
 
 **`Cannot write /data/…`** — the data directory isn't writable by the container's user. The
 entrypoint only claims root-owned files (what Docker creates for a missing bind-mount source), so
-a folder owned by someone else needs `DAPPLE_UID`/`DAPPLE_GID` in `.env` to match its owner. Dapple keeps running: it falls back to
+a folder owned by someone else needs `PUID`/`PGID` in `docker-compose.yml` to match its owner. Dapple keeps running: it falls back to
 the built-in presets, and a failed *state* write never fails an apply (the lights did change —
 failing would make Home Assistant retry a successful operation), while a failed *config* write
 does 500 and rolls back.

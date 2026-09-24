@@ -132,7 +132,9 @@ This repo is open source; `data/` and `.env` are the only places real details ma
 - Startup refreshes devices in a background task so unreachable strands don't block boot.
 - `data/` is bind-mounted and owned by the host user. The container starts as root so
   `scripts/entrypoint.sh` can chown anything root-owned in `/data` (Docker creates a missing
-  bind source as root), then drops to `DAPPLE_UID`/`DAPPLE_GID` (default 1000) via `setpriv`.
+  bind source as root), then drops to `PUID`/`PGID` (default 1000) via `setpriv`. The compose file follows
+  the LinuxServer.io shape — literal values users edit, no `.env` — because that's what
+  homelab users already know; only the override reads `DAPPLE_PORT`.
 - The repo is public on GitHub (`andrewfraley/dapple`); the image is `afraley/dapple` on Docker Hub,
   published by `.github/workflows/docker.yml`. `docker-compose.yml` must stay usable on its own
   (users download only that file), so anything that needs the source goes in the override.
