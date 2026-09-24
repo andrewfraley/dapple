@@ -24,8 +24,7 @@ export const getConfig = () => request('/api/config')
 // ---- groups: what each one is showing, and changing it ---------------------
 
 export const getGroups = () => request('/api/groups')
-export const getGroup = (id) => request(`/api/groups/${encodeURIComponent(id)}`)
-// Read from the strands, so it notices changes made outside Dapple; slower than getGroup.
+// Read from the strands, so it notices changes made outside Dapple; slower than getGroups.
 export const getGroupLive = (id) => request(`/api/groups/${encodeURIComponent(id)}/live`)
 
 export const applyToGroup = (id, pattern) =>
