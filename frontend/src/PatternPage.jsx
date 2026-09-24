@@ -305,8 +305,11 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
     setStatus({ severity: 'info', text: `Loaded “${selected}” — not applied yet` })
   }
 
+  // There's no undo, and a built-in preset is gone for good once deleted.
   const onDeletePreset = async () => {
-    await run(`Deleted “${selected}”`, () => api.deletePreset(selected))
+    if (!window.confirm(`Delete the preset “${selected}”? This can't be undone.`)) return
+    const deleted = await run(`Deleted “${selected}”`, () => api.deletePreset(selected))
+    if (!deleted) return
     if (fromPreset?.name === selected) setFromPreset(null)
     setSelected('')
     loadPresets()
@@ -317,7 +320,8 @@ export default function PatternPage({ groups, groupId, loaded, onSelectGroup, on
     if (!name) return
     setSaveOpen(false)
     const saved = await run(`Saved “${name}”`, () => api.savePreset(name, pattern))
-    if (saved) setFromPreset({ name, pattern })
+    if (!saved) return
+    setFromPreset({ name, pattern })
     setSelected(name)
     loadPresets()
   }
