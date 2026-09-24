@@ -225,7 +225,7 @@ Everything Dapple remembers lives in the `data` folder next to `docker-compose.y
 |---|---|
 | `config.yaml` | your strands, their addresses, which group each is in, and your Home Assistant connection (including its password, so keep the folder private) |
 | `presets.json` | your saved patterns |
-| `state.json` | what each group is currently showing |
+| `state.json` | the pattern Dapple last sent to each group (the lights may have been changed since, from the Twinkly app) |
 
 Back up that folder and you've backed up everything. It's all plain text, so you can read and
 edit it if you want to.
