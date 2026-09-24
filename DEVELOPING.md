@@ -87,15 +87,7 @@ mqtt:
 
 `config.yaml` is the only way to configure strands: the Strands tab writes it, and you can
 hand-write it to seed a deployment. Starting with no file at all is normal — the first strand
-you add creates one.
-
-(There used to be a `TWINKLY_HOSTS` env var for a zero-config first run. It was dropped once the
-Strands tab existed: it could only ever produce a single group, so on any multi-group setup it
-silently put unrelated runs of lights into one stretched pattern.)
-
-A file written before groups existed (a flat `devices:` list) loads as a single group,
-`all-strands`, which is exactly how it behaved before. Loading is side-effect free; it's
-rewritten in the new shape on the first edit.
+you add creates one. Loading never writes to it.
 
 ---
 

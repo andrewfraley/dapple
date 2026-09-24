@@ -45,10 +45,6 @@ RESERVED_GROUP_IDS = frozenset({"order", "all", "new"})
 TOPIC_PREFIX_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 DISCOVERY_PREFIX_PATTERN = re.compile(r"^[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*$")
 
-#: What the migration calls the group it wraps a pre-groups config into.
-MIGRATED_GROUP_ID = "all-strands"
-MIGRATED_GROUP_NAME = "All strands"
-
 
 class ConfigError(Exception):
     """A strand or group entry that can't be used as given."""
@@ -200,19 +196,8 @@ def _device_from_yaml(entry: object, where: str, index: int) -> DeviceConfig:
     )
 
 
-def _one_group(devices: list[DeviceConfig]) -> list[GroupConfig]:
-    """Wrap a flat strand list in a single group.
-
-    This is what a pre-groups config migrates to, and it is exactly the old
-    behavior: one pattern across the lot, continuity preserved across the join.
-    """
-    if not devices:
-        return []
-    return [GroupConfig(id=MIGRATED_GROUP_ID, name=MIGRATED_GROUP_NAME, devices=devices)]
-
-
 def _groups_from_yaml(document: object) -> list[GroupConfig]:
-    """Parse ``groups:``, or migrate a ``devices:`` file into one group.
+    """Parse ``groups:``.
 
     A hand-edited file shouldn't take the app down, so duplicate ids and
     repeated hosts are warned about and repaired rather than raised. A strand
@@ -220,9 +205,6 @@ def _groups_from_yaml(document: object) -> list[GroupConfig]:
     """
     if not isinstance(document, dict):
         raise ValueError("config.yaml must contain a mapping at the top level")
-
-    if document.get("groups") is None:
-        return _one_group(_flat_devices_from_yaml(document))
 
     entries = document.get("groups") or []
     if not isinstance(entries, list):
@@ -245,7 +227,7 @@ def _groups_from_yaml(document: object) -> list[GroupConfig]:
             )
         seen_ids.add(group_id)
 
-        strands = entry.get("strands") or entry.get("devices") or []
+        strands = entry.get("strands") or []
         if not isinstance(strands, list):
             raise ValueError(f"config.yaml: group {group_id!r} 'strands' must be a list")
         devices = []
@@ -261,14 +243,6 @@ def _groups_from_yaml(document: object) -> list[GroupConfig]:
             devices.append(device)
         groups.append(GroupConfig(id=group_id, name=name, devices=devices))
     return groups
-
-
-def _flat_devices_from_yaml(document: dict) -> list[DeviceConfig]:
-    """The pre-groups ``devices:`` list, for migration."""
-    entries = document.get("devices") or []
-    if not isinstance(entries, list):
-        raise ValueError("config.yaml: 'devices' must be a list")
-    return [_device_from_yaml(entry, "top-level", index) for index, entry in enumerate(entries, 1)]
 
 
 def _mqtt_from_yaml(document: object) -> MqttConfig | None:
@@ -308,12 +282,8 @@ def load_config(
     """Read config.yaml, if there is one yet.
 
     Starting with no strands at all is normal: the Strands page writes this
-    file the first time you add one.
-
-    A file written before groups existed loads as one group, so nothing about
-    the running setup changes. It is rewritten in the new shape on the first
-    edit — loading stays side-effect free, which matters when /data is
-    read-only.
+    file the first time you add one. Loading never writes, which matters when
+    /data is read-only.
     """
     env = os.environ if env is None else env
     data_dir = Path(data_dir or env.get("DAPPLE_DATA_DIR") or DEFAULT_DATA_DIR)
