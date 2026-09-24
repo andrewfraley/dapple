@@ -5,7 +5,7 @@ description = "Static multi-color patterns for Twinkly light strands, with a RES
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
-    "uvicorn[standard]>=0.30",
+    "uvicorn[standard]>=0.53.0",
     "xled>=0.7.0",
     "pydantic>=2.7",
     "pyyaml>=6.0",
@@ -21,7 +21,7 @@ dev = [
 ]
 
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=84.0.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
