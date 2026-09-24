@@ -204,8 +204,18 @@ def _response(results) -> ApplyResponse:
 # ---- status ---------------------------------------------------------------
 
 
+@app.get("/api/ping")
+async def ping() -> dict:
+    """Liveness only, for the container HEALTHCHECK. It never touches a strand:
+    polling them every 30s would be traffic for nothing, and an unplugged strand
+    isn't a reason to restart Dapple."""
+    return {"ok": True}
+
+
 @app.get("/api/health", response_model=HealthResponse)
 async def health(request: Request) -> HealthResponse:
+    """Asks every strand, so it's slow when one is down. ``ok`` is false then,
+    but the status is still 200: Dapple itself is fine."""
     results = await manager(request).health()
     return HealthResponse(ok=all(result.ok for result in results), devices=results)
 

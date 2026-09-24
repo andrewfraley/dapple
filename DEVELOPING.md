@@ -142,7 +142,8 @@ Everything under `/api`, JSON in and out, errors as `{"detail": "…"}`. Interac
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/api/health` | `{ok, devices: [{name, host, ok, error}]}` — what the container HEALTHCHECK calls |
+| GET | `/api/ping` | `{"ok": true}` — liveness only, never touches a strand; what the container HEALTHCHECK calls |
+| GET | `/api/health` | `{ok, devices: [{name, host, ok, error}]}` — asks every strand; `ok` is false if any is down, still 200 |
 | GET | `/api/devices` | every strand: LED count, profile, firmware, mode, brightness, and its `group` |
 | POST | `/api/devices/refresh` | re-read gestalt for every strand. Changes nothing on the strands — only our cache — which is why it takes no group |
 | POST | `/api/preview` | `{pattern, num_leds, offset}` → the pattern as `[r,g,b,w]` per LED |

@@ -257,6 +257,14 @@ def add(client, host, **fields):
 # ---- status ---------------------------------------------------------------
 
 
+def test_ping_answers_without_asking_any_strand(client, manager):
+    """It's the container HEALTHCHECK: every 30s, forever."""
+    before = list(manager.calls)
+
+    assert client.get("/api/ping").json() == {"ok": True}
+    assert manager.calls == before
+
+
 def test_health(client):
     body = client.get("/api/health").json()
 
