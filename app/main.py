@@ -303,8 +303,8 @@ async def turn_group_off(request: Request, group_id: str) -> ApplyResponse:
 
 @app.post("/api/preview", response_model=PreviewResponse)
 async def preview(payload: PreviewRequest) -> PreviewResponse:
-    """The pattern as LED colors. The UI computes this itself; this endpoint is
-    the reference the JS port is tested against."""
+    """The pattern as LED colors, for scripts. The UI computes this itself in
+    frontend/src/pattern.js, kept in step by tests/test_pattern_parity.py."""
     return PreviewResponse(leds=led_colors(payload.pattern, payload.num_leds, payload.offset))
 
 
