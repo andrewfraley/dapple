@@ -188,13 +188,13 @@ the two devices are probably on different networks — a "guest" Wi-Fi network i
 
 **The colors look wrong — orange comes out yellow, or everything looks washed out.**
 Dapple corrects for the difference between screen colors and LED colors, but the right amount
-varies. Open `data/config.yaml` in a text editor and change the last line to `gamma: 2.8` for
+varies. Open `data/config.yaml` in a text editor and add a line `gamma: 2.8` at the end for
 deeper, richer colors (or `gamma: 1.0` to turn the correction off entirely), then run
-`docker compose restart`.
+`docker compose restart`. If there's a `gamma:` line already, change that one instead.
 
 **A pattern applies with no errors but the lights stay dark.**
-A few strands refuse a pattern sent the normal way. In `data/config.yaml`, change
-`movie_frames: 1` to `movie_frames: 2` and run `docker compose restart`.
+A few strands refuse a pattern sent the normal way. Add a line `movie_frames: 2` at the end of
+`data/config.yaml` and run `docker compose restart`.
 
 **The pattern restarts partway along a run of lights.**
 The two strands are either in different groups, or in the wrong order within their group. See
