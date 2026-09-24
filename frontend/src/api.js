@@ -23,6 +23,7 @@ async function request(path, options = {}) {
   return body
 }
 
+export const ping = () => request('/api/ping')
 export const getDevices = () => request('/api/devices')
 export const refreshDevices = () => request('/api/devices/refresh', { method: 'POST' })
 export const getPresets = () => request('/api/presets')

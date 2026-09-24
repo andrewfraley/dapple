@@ -10,6 +10,7 @@ import Typography from '@mui/material/Typography'
 import RefreshIcon from '@mui/icons-material/Refresh'
 
 import * as api from './api.js'
+import Footer from './Footer.jsx'
 import HomeAssistantPage from './HomeAssistantPage.jsx'
 import PatternPage from './PatternPage.jsx'
 import StrandsPage from './StrandsPage.jsx'
@@ -135,6 +136,7 @@ export default function App() {
           />
         )}
       </Container>
+      <Footer />
     </Box>
   )
 }

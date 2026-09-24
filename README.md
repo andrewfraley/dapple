@@ -216,7 +216,8 @@ Dapple can't save to its `data` folder. On Linux, run `id -u` and `id -g`, open
 
 **Something else.**
 `docker compose logs` prints what Dapple has been doing. Warnings mentioning `401` are normal —
-the lights hand out short-lived passes and Dapple renews them automatically.
+the lights hand out short-lived passes and Dapple renews them automatically. If you report a
+problem, include the version number shown at the bottom of Dapple's page.
 
 ---
 

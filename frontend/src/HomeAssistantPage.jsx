@@ -10,8 +10,9 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 
 import * as api from './api.js'
+import { REPO_URL } from './links.js'
 
-const DOCS_URL = 'https://github.com/andrewfraley/dapple/blob/main/HOME_ASSISTANT.md'
+const DOCS_URL = `${REPO_URL}/blob/main/HOME_ASSISTANT.md`
 
 /** How often the connection status is re-read while this tab is open. */
 const STATUS_POLL_MS = 3000
