@@ -146,8 +146,9 @@ nothing to pick).
   how many lights each run gets.
 - **Brightness** — takes effect as soon as you let go of the slider.
 
-The bar at the top shows what you're about to get, updating as you change things. If a group has
-two strands, a thin line marks where one ends and the next begins.
+The preview at the top shows what you're about to get, one dot per light, updating as you change
+things. If a group has more than one strand, each gets its own block with its name above it; the
+pattern still runs on from one block into the next, just as it will on the lights.
 
 When it looks right, click **Apply**. Nothing reaches the lights until you do.
 
