@@ -362,12 +362,28 @@ starts at its own LED 0. That's a bug.
 
 | Push | Tags |
 |---|---|
-| `main` | `latest`, `sha-<commit>` |
+| `main` | `latest`, `sha-<commit>`, and `1.2.3` + `1.2` when it's a release (below) |
 | any other branch, e.g. `mqtt-discovery` | `mqtt-discovery`, `sha-<commit>` |
 | tag `v1.2.3` | `1.2.3`, `1.2`, `sha-<commit>` |
 
 A branch build never touches `latest` or a version tag, so it's safe to push work in progress.
 Slashes in a branch name become dashes (`feature/x` → `feature-x`).
+
+**Changes reach `main` only through pull requests, and a person merges them.** Push a branch, open
+a PR, and wait for CI and a review.
+
+**Releasing is a pull request that bumps the version.** In that PR:
+
+1. Set the new version in `pyproject.toml` and `frontend/package.json`. Then run
+   `npm --prefix frontend install --package-lock-only` and `uv lock` so both lock files follow.
+   CI fails if the two versions differ or `uv.lock` is stale.
+2. Add the release notes as `docs/releases/<version>.md`, written for people running Dapple, not
+   developers. CI fails on a PR whose version has no tag and no notes file.
+
+When the PR is merged, the `main` build sees a version with no `v<version>` tag. It pushes the
+image as `latest`, `<version>` and `<major>.<minor>`, then tags the merge commit and creates the
+GitHub release `Dapple <version>` from the notes file. A PR that doesn't bump the version just
+moves `latest`.
 
 **Testing a branch build.** On the machine that runs Dapple, point `docker-compose.yml` at the
 branch tag and pull it:

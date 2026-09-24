@@ -155,6 +155,21 @@ This repo is open source; `data/` and `.env` are the only places real details ma
   `grep -rnIE '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b' --exclude-dir={node_modules,.venv,dist,data} .`
   Anything outside `127.0.0.1`, `0.0.0.0` and the example addresses above needs a reason.
 
+## Branches, pull requests and releases
+
+- Work on a branch, never on `main`. Commit each logical change on its own. Push the branch and
+  open a pull request with `gh pr create`.
+- **Never merge a PR, push to `main`, or create a tag or GitHub release.** A person merges.
+  Your job ends when the PR is open and its CI is green; then wait for them.
+- Merging to `main` is what releases. If `pyproject.toml` has a version with no `v<version>` tag,
+  the `main` build publishes that image version, tags the commit and creates the GitHub release
+  from `docs/releases/<version>.md`. So a release is just a PR that bumps the version in
+  `pyproject.toml` and `frontend/package.json`, refreshes both lock files (`uv lock`, and
+  `npm --prefix frontend install --package-lock-only`) and adds the notes file. DEVELOPING.md's
+  *Releases* section has the details.
+- Release notes are for people running Dapple, in the voice of README.md: what changed for them
+  and how to upgrade. They're not a commit log. See `docs/releases/` for the shape.
+
 ## Gotchas
 
 - `xled` sets no request timeout. `Device._apply_timeout` patches the session's `send`, not
@@ -168,8 +183,8 @@ This repo is open source; `data/` and `.env` are the only places real details ma
   homelab users already know; only the override reads `DAPPLE_PORT`.
 - The repo is public on GitHub (`andrewfraley/dapple`); the image is `afraley/dapple` on Docker Hub,
   published by `.github/workflows/docker.yml`. Every branch push publishes
-  `afraley/dapple:<branch>` for testing on the real strands; only main moves `latest`, and only
-  `v*` tags make versions. `docker-compose.yml` must stay usable on its own (users download only
-  that file), so anything that needs the source goes in the override.
+  `afraley/dapple:<branch>` for testing on the real strands; only main moves `latest`.
+  `docker-compose.yml` must stay usable on its own (users download only that file), so anything
+  that needs the source goes in the override.
   Check `git status` before committing:
   `data/`, `.env`, `frontend/dist/` and `*.egg-info/` must stay untracked.
