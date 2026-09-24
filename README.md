@@ -79,6 +79,9 @@ The last line downloads Dapple itself, which takes a minute the first time. When
 Running it on a different machine from the one you're browsing on? Use that machine's address
 instead of `localhost` — for example `http://192.168.1.10:8080`.
 
+Dapple has no login. Anyone who can open that page can change your lights and your Home
+Assistant connection, so keep it on your home network and don't open the port on your router.
+
 > **If the page doesn't load**, something else on that computer may already be using port 8080.
 > Open `docker-compose.yml` in a text editor, change `8080:8080` to `8081:8080`, run
 > `docker compose up -d` again, and use `:8081` in the address instead.
