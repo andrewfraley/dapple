@@ -1,7 +1,6 @@
 .venv/
 .env
-data/*
-!data/.gitkeep
+data/
 frontend/node_modules/
 frontend/dist/
 static/
