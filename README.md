@@ -236,6 +236,11 @@ edit it if you want to.
 To update Dapple later, run `docker compose up -d` again. It fetches the newest version first. Your `data` folder is
 left alone.
 
+If you'd rather update only when you choose to, pin a version. In `docker-compose.yml`, change
+`afraley/dapple:latest` to a release number, such as `afraley/dapple:0.4.0`. The
+[releases page](https://github.com/andrewfraley/dapple/releases) lists them, with what changed in
+each. Then `docker compose up -d` keeps running that version until you change the number.
+
 To stop it: `docker compose down`. To start it again: `docker compose up -d`.
 
 ---

@@ -33,8 +33,8 @@ DAPPLE_DATA_DIR=./data .venv/bin/uvicorn app.main:app --reload --port 8080
 `uv.lock` pins every Python dependency. CI and the Docker image both install from it, so what
 the tests ran against is what ships. After changing dependencies in `pyproject.toml`, run
 `uv lock`. To take newer versions, run `uv lock --upgrade`, then run the tests and commit the
-lock. Run `uv sync --extra dev` after a version bump too, because the running app reads its
-version from the installed package.
+lock. Read the lock diff before merging an upgrade, including Dependabot's: a hash proves you
+got the version you asked for, not that the version is safe.
 
 The API serves the built UI from `static/` (where the Docker image puts it) or `frontend/dist/`,
 whichever exists. With neither, `/` explains what to build and `/docs` still works.

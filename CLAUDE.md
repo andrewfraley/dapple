@@ -155,6 +155,20 @@ This repo is open source; `data/` and `.env` are the only places real details ma
   `grep -rnIE '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b' --exclude-dir={node_modules,.venv,dist,data} .`
   Anything outside `127.0.0.1`, `0.0.0.0` and the example addresses above needs a reason.
 
+## Supply chain
+
+Everyone runs `latest` with `pull_policy: always`, so anything that reaches a published image
+reaches every install. Keep every input pinned:
+
+- GitHub Actions by full commit SHA with the version in a comment
+  (`uses: actions/checkout@<sha> # v7.0.1`). The repository refuses unpinned actions.
+- Base images by digest (`python:3.12-slim@sha256:…`), and uv from its image by digest.
+- Python only from `uv.lock`, installed with `--require-hashes`. Don't `pip install` anything by
+  name in the Dockerfile or CI, and don't build the app as a package: a build backend gets fetched
+  unpinned. npm only from `package-lock.json` via `npm ci`.
+- Dependabot (`.github/dependabot.yml`) proposes updates as PRs. When reviewing one, read the
+  lock diff; a new version of a small dependency like `xled` deserves a look at what changed.
+
 ## Branches, pull requests and releases
 
 - Work on a branch, never on `main`. Commit each logical change on its own. Push the branch and
