@@ -219,3 +219,7 @@ To stop it: `docker compose down`. To start it again: `docker compose up -d`.
 Animations, music-reactive effects, or different patterns on different parts of one strand. The
 pattern is deliberately still — that's what lets the lights hold it on their own with Dapple
 switched off.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
