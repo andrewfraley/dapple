@@ -1,0 +1,46 @@
+# Copy to ./data/config.yaml, or just use the Strands tab — it writes this same
+# file.
+#
+# Each strand belongs to exactly one group, and a group gets one pattern.
+#
+# Strand order WITHIN a group is physical order: it sets the offsets that make an
+# interleaved pattern continue across the join instead of restarting. Group order
+# is display order only — every group starts its pattern at its own first LED.
+#
+# 'id' is what the API and Home Assistant address. It never changes, so renaming
+# a group is safe.
+groups:
+  # Two strands wired end to end as one run: one group, so the pattern is
+  # continuous across the join between them.
+  - id: tree
+    name: "Christmas tree"
+    strands:
+      - name: TreeTop
+        host: 192.168.40.21
+      - name: TreeBottom
+        host: 192.168.40.22
+
+  # A strand on its own is simply a group of one.
+  - id: porch
+    name: "Front porch"
+    strands:
+      - name: Porch
+        host: 192.168.40.30
+        # The strand reports its own LED count and color profile, and it is the
+        # authority: the frame we upload has to be exactly as long as it expects.
+        # Set these only for a strand that genuinely misreports, or to build
+        # patterns before the strands are on the network. The UI doesn't offer
+        # them for that reason.
+        # number_of_led: 105
+        # led_profile: RGBW
+
+# Some firmware refuses a single-frame movie. If a pattern uploads without
+# error but the strand stays dark, set this to 2 (the frame is sent twice).
+# movie_frames: 1
+
+# Seconds to wait on a strand before giving up on it.
+# timeout: 5.0
+
+# sRGB → PWM gamma. 2.2 makes the strand match the on-screen preview; raise it
+# for deeper colors, or set 1.0 to send values through untouched.
+# gamma: 2.2

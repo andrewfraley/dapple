@@ -1,0 +1,10 @@
+services:
+  dapple:
+    build: .
+    container_name: dapple
+    restart: unless-stopped
+    ports:
+      - "${DAPPLE_PORT:-8080}:8080"
+    volumes:
+      - ./data:/data:z
+    user: "${DAPPLE_UID:-1000}:${DAPPLE_GID:-1000}"
