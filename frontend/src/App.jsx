@@ -78,7 +78,10 @@ export default function App() {
         sx={{ borderBottom: 1, borderColor: 'divider' }}
       >
         <Toolbar variant="dense" sx={{ gap: 2 }}>
-          <Typography variant="h6">Dapple</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box component="img" src="/favicon.svg" alt="" sx={{ width: 28, height: 28 }} />
+            <Typography variant="h6">Dapple</Typography>
+          </Box>
           <Tabs
             value={route.tab}
             onChange={(_event, tab) => navigate(tab, tab === 'pattern' ? groupId : null)}

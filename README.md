@@ -1,4 +1,4 @@
-# Dapple
+# <img src="frontend/public/favicon.svg" alt="" width="40" align="top"> Dapple
 
 Dapple lets you set the colors on your Twinkly light strands from a web page on your own
 network — "80% orange, 20% purple, mixed evenly" — and save those looks so you can bring them
