@@ -183,6 +183,18 @@ reaches every install. Keep every input pinned:
   *Releases* section has the details.
 - Release notes are for people running Dapple, in the voice of README.md: what changed for them
   and how to upgrade. They're not a commit log. See `docs/releases/` for the shape.
+- **Every PR you open is a release.** Bump the version as part of it and add its notes, even when
+  the change is small. A PR that moves `latest` without a version leaves users with no record of
+  what changed. Before 1.0:
+  - **Patch** (`0.4.0` → `0.4.1`): fixes, hardening, dependency updates, docs. Anything a user
+    doesn't have to act on.
+  - **Minor** (`0.4.1` → `0.5.0`): new features, and anything users must act on or that breaks
+    something: a config key renamed, a REST route changed, a behavior people relied on removed.
+    The notes must say what to do.
+  - Bump from the latest *tag*, not from what another open PR claims. If two release PRs are
+    open, the second to merge has to rebase and take the next number.
+- Dependabot's PRs can't bump the version or write notes, so they merge without a release. The
+  next release PR picks up their changes and mentions any that users would notice.
 
 ## Gotchas
 
