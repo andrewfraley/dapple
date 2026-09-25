@@ -11,12 +11,13 @@ from app.storage import atomic_write
 
 log = logging.getLogger(__name__)
 
-ORANGE = (255, 152, 0, 0)
+ORANGE = (255, 126, 0, 0)
 PURPLE = (128, 0, 255, 0)
 RED = (255, 0, 0, 0)
 GREEN = (0, 255, 0, 0)
 WHITE = (0, 0, 0, 255)
 BLUE = (0, 0, 255, 0)
+YELLOW = (255, 236, 0, 0)
 
 
 def default_presets() -> dict[str, Pattern]:
@@ -27,7 +28,13 @@ def default_presets() -> dict[str, Pattern]:
     load with both sliders at the far left.
     """
     return {
-        "Halloween": Pattern(slots=[Slot(rgbw=ORANGE, weight=80), Slot(rgbw=PURPLE, weight=20)]),
+        "Halloween": Pattern(
+            slots=[
+                Slot(rgbw=ORANGE, weight=80),
+                Slot(rgbw=PURPLE, weight=15),
+                Slot(rgbw=YELLOW, weight=5),
+            ]
+        ),
         "Christmas": Pattern(
             slots=[
                 Slot(rgbw=RED, weight=40),

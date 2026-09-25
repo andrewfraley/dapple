@@ -10,7 +10,7 @@ from app.actions import GroupActions
 from app.config import AppConfig, ConfigStore, DeviceConfig, MqttConfig, load_config
 from app.main import app
 from app.models import DeviceInfo, DeviceResult, StrandSegment
-from app.presets import PresetStore
+from app.presets import PresetStore, default_presets
 from app.state import StateStore
 
 PATTERN = {
@@ -432,7 +432,7 @@ def test_apply_a_preset_to_a_group(client, manager):
 
     assert body["ok"] is True
     assert manager.applied[0][0] == "tree"
-    assert len(manager.applied[0][1].slots) == 2
+    assert manager.applied[0][1] == default_presets()["Halloween"]
 
 
 def test_applying_a_preset_records_its_name(client):
