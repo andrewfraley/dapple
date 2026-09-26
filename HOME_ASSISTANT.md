@@ -11,6 +11,14 @@ over MQTT and sets up the lights itself. It's off until you set it up.
 
 ## Setting it up
 
+**Running Dapple as a Home Assistant app** (see the README's
+[On Home Assistant OS](README.md#on-home-assistant-os))**, with the Mosquitto broker installed?**
+Dapple has already filled in the broker's address and a login of its own. Open its Home
+Assistant tab, turn on **Connect to Home Assistant** and press **Save**. That's all. If you
+install Mosquitto after Dapple, restart the Dapple app so it picks it up.
+
+Otherwise:
+
 1. **Give Home Assistant an MQTT broker, if it doesn't have one.** Install the **Mosquitto
    broker** add-on and start it. Home Assistant then offers to set up the **MQTT** integration:
    accept. If you already use MQTT (for Zigbee2MQTT, say), skip this step.
@@ -110,6 +118,8 @@ is stopped.
 
 ## Dapple's own page in Home Assistant
 
+Running Dapple as a Home Assistant app? It's in the sidebar already; skip this.
+
 To open Dapple's editor from the Home Assistant sidebar, go to Settings → Dashboards → Add
 dashboard → **Webpage**, and enter Dapple's address, e.g. `http://192.168.1.10:8080/`.
 
@@ -147,6 +157,11 @@ The Home Assistant tab shows the reason. The usual ones:
 If you'd rather not run a broker, Home Assistant's `rest_command` can call Dapple directly. You
 lose the automatic lights and the state updates, and have to write the YAML yourself. Put this
 in `configuration.yaml`, replacing `dapple.lan:8080` with Dapple's address:
+
+- Running Dapple with Docker, that's the machine's address and port, e.g. `192.168.1.10:8080`.
+- Running it as a Home Assistant app, Home Assistant reaches it by its hostname, which the app's
+  Info page lists: `b68bc6ef-dapple:8080` if you added it with the README's link. Nothing needs
+  turning on in the app's Network tab for this.
 
 ```yaml
 rest_command:

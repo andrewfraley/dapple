@@ -50,7 +50,9 @@ You'll need three things:
    to each strand directly.
 3. **Docker** on the computer that will run Dapple — a NAS, a Raspberry Pi, a spare laptop,
    whatever stays on. If you don't have it, install
-   [Docker Desktop](https://docs.docker.com/get-started/get-docker/).
+   [Docker Desktop](https://docs.docker.com/get-started/get-docker/). Or, if you run Home
+   Assistant OS, Dapple can run inside Home Assistant instead:
+   see [On Home Assistant OS](#on-home-assistant-os).
 
 You'll also need each strand's address. The Twinkly app shows it under the device's settings,
 or your router's device list will have it. It looks like `192.168.1.50`.
@@ -85,6 +87,28 @@ Assistant connection, so keep it on your home network and don't open the port on
 > **If the page doesn't load**, something else on that computer may already be using port 8080.
 > Open `docker-compose.yml` in a text editor, change `8080:8080` to `8081:8080`, run
 > `docker compose up -d` again, and use `:8081` in the address instead.
+
+---
+
+## On Home Assistant OS
+
+If your Home Assistant runs Home Assistant OS (a Home Assistant Green or Yellow does, and so do
+most Raspberry Pi installs), Dapple can run as a Home Assistant app, also called an add-on.
+There's no other computer and no Docker to set up.
+
+1. Click
+   **[Add Dapple to Home Assistant](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fandrewfraley%2Fdapple%23stable)**
+   and confirm. Or, in Home Assistant, go to Settings → Apps → App store, open the ⋮ menu →
+   **Repositories** and add `https://github.com/andrewfraley/dapple#stable`.
+2. Find **Dapple** in the App store, then click **Install** and **Start**.
+3. Turn on **Show in sidebar**, and click **Dapple** in the sidebar.
+
+Dapple opens inside Home Assistant, behind its login. New versions show up under Settings →
+Updates, like any other app's. If you use the Mosquitto broker, Dapple has already filled in
+its Home Assistant tab: see [HOME_ASSISTANT.md](HOME_ASSISTANT.md).
+
+Home Assistant installed some other way (in Docker, say) doesn't have apps. Run Dapple with
+Docker as above instead.
 
 ---
 
@@ -243,6 +267,9 @@ If you'd rather update only when you choose to, pin a version. In `docker-compos
 each. Then `docker compose up -d` keeps running that version until you change the number.
 
 To stop it: `docker compose down`. To start it again: `docker compose up -d`.
+
+Running Dapple as a Home Assistant app? The same files live inside the app, and Home
+Assistant's own backups include them. Updates arrive under Settings → Updates.
 
 ---
 
