@@ -29,10 +29,12 @@ const LIVE_POLL_MS = 5000
 /** For a pattern that doesn't say: a preset saved without one, or a new pattern. */
 const DEFAULT_BRIGHTNESS = 60
 
+/** The built-in Halloween preset (app/presets.py); keep the two the same. */
 const STARTING_PATTERN = {
   slots: [
-    { rgbw: [255, 152, 0, 0], weight: 80 },
-    { rgbw: [128, 0, 255, 0], weight: 20 },
+    { rgbw: [255, 126, 0, 0], weight: 80 },
+    { rgbw: [128, 0, 255, 0], weight: 15 },
+    { rgbw: [255, 236, 0, 0], weight: 5 },
   ],
   layout: 'interleaved',
   block_size: 1,

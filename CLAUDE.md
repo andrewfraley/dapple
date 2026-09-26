@@ -19,7 +19,7 @@ the API reference and internals. Keep them in their lanes — don't put REST tab
 ## Commands
 
 ```bash
-.venv/bin/python -m pytest -q                 # 341 tests, no network, no strands
+.venv/bin/python -m pytest -q                 # 342 tests, no network, no strands
 .venv/bin/pre-commit run --all-files          # Black + Prettier; the git hook runs this on staged files
 npm --prefix frontend test                    # JS pattern port vs Python fixtures
 npm --prefix frontend run build               # required before the Docker build picks up UI changes

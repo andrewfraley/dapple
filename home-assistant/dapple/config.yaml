@@ -1,7 +1,7 @@
 # The Dapple add-on. The Supervisor pulls afraley/dapple:<version>, the same
 # image Docker users run, so `version` must match pyproject.toml (CI checks).
 name: Dapple
-version: "0.6.0"
+version: "0.6.1"
 slug: dapple
 description: Static multi-color patterns for Twinkly lights
 url: https://github.com/andrewfraley/dapple

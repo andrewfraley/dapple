@@ -1,6 +1,8 @@
 """The preset store: seeding, round-tripping, atomic writes, bad input."""
 
 import json
+import re
+from pathlib import Path
 
 import pytest
 
@@ -184,3 +186,16 @@ def test_built_in_presets_sit_on_the_share_sliders_steps():
     for name, pattern in default_presets().items():
         for slot in pattern.slots:
             assert 5 <= slot.weight <= 100 and slot.weight % 5 == 0, name
+
+
+def test_the_editor_starts_on_the_halloween_preset():
+    """PatternPage.jsx keeps its own copy for before the presets load; it drifted once."""
+    source = (Path(__file__).parent.parent / "frontend/src/PatternPage.jsx").read_text()
+    block = re.search(r"const STARTING_PATTERN = \{.*?\n\}", source, re.S).group()
+    slots = [
+        (tuple(int(n) for n in rgbw.split(",")), int(weight))
+        for rgbw, weight in re.findall(r"rgbw: \[([\d, ]+)\], weight: (\d+)", block)
+    ]
+
+    halloween = default_presets()["Halloween"]
+    assert slots == [(slot.rgbw, slot.weight) for slot in halloween.slots]
