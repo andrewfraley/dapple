@@ -81,7 +81,7 @@ export default function App() {
       >
         <Toolbar variant="dense" sx={{ gap: { xs: 1, sm: 2 } }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Box component="img" src="/favicon.svg" alt="" sx={{ width: 28, height: 28 }} />
+            <Box component="img" src="favicon.svg" alt="" sx={{ width: 28, height: 28 }} />
             {/* Room for three tabs on a phone; the logo still says whose app it is. */}
             <Typography variant="h6" component="h1" sx={{ display: { xs: 'none', sm: 'block' } }}>
               Dapple

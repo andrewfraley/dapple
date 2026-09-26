@@ -562,6 +562,6 @@ else:
         return HTMLResponse(
             "<h1>Dapple</h1><p>No built UI found. Run <code>npm --prefix frontend "
             "install &amp;&amp; npm --prefix frontend run build</code>, or use the "
-            "Docker image. The API is up at <a href='/docs'>/docs</a>.</p>",
+            "Docker image. The API is up at <a href='docs'>/docs</a>.</p>",
             status_code=200,
         )
