@@ -9,8 +9,9 @@ name: Build and publish
 on:
   push:
     # Every branch builds, so a feature branch can be pulled and tried on real
-    # strands before it merges. Only main moves `latest`. `stable` is only ever
-    # moved to a commit main already built (see the release job).
+    # strands before it merges. Only main moves `latest`. `stable` is left out:
+    # the release job moves it to a commit main already built, with a deploy
+    # key, and unlike the workflow's own token that push starts a run.
     branches: ["**", "!stable"]
     tags: ["v*"]
   pull_request:
@@ -156,24 +157,31 @@ jobs:
       github.event_name == 'push' && github.ref == 'refs/heads/main' &&
       needs.test.outputs.release == 'true' && needs.image.outputs.pushed == 'true'
     runs-on: ubuntu-latest
+    # Holds STABLE_DEPLOY_KEY, and only runs on main.
+    environment: release
     permissions:
       contents: write
     steps:
+      # The deploy key, not the workflow's token: that token may not push a
+      # commit that changes .github/workflows/, and moving stable does. Full
+      # history so the push below has every commit it names.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # Home Assistant reads the add-on from `stable`, so it only sees a new
-      # version once that version's image exists. Fast-forward only, and a
-      # no-op on a re-run, so it goes before the step that can't be repeated.
-      - name: Move stable to this release, for the Home Assistant add-on
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: >-
-          gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/stable"
-          -f sha="$GITHUB_SHA" -F force=false
+        with:
+          ssh-key: ${{ secrets.STABLE_DEPLOY_KEY }}
+          fetch-depth: 0
+      # Skipped if it already exists, so a re-run gets on to moving stable.
       - name: Tag v${{ needs.test.outputs.version }} and publish the release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.test.outputs.version }}
-        run: >-
-          gh release create "v$VERSION" --target "$GITHUB_SHA"
-          --title "Dapple $VERSION" --notes-file "docs/releases/$VERSION.md"
+        run: |
+          gh release view "v$VERSION" >/dev/null 2>&1 && exit 0
+          gh release create "v$VERSION" --target "$GITHUB_SHA" \
+            --title "Dapple $VERSION" --notes-file "docs/releases/$VERSION.md"
+      # Home Assistant reads the add-on from `stable`, so it only sees a new
+      # version once that version's image exists. After the release, so a
+      # failure here can't hold it up for Docker users. No --force: git refuses
+      # anything but a fast-forward, and pushing the same commit again is a no-op.
+      - name: Move stable to this release, for the Home Assistant add-on
+        run: git push origin "$GITHUB_SHA:refs/heads/stable"
 

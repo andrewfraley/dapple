@@ -228,7 +228,8 @@ reaches every install. Keep every input pinned:
   `docker-compose.yml` must stay usable on its own (users download only that file), so anything
   that needs the source goes in the override.
   The Home Assistant add-on (`home-assistant/dapple/`) runs that same image and is read by the
-  Supervisor from the `stable` branch, which only the release job moves. Don't push to it.
+  Supervisor from the `stable` branch, which only the release job moves, with the
+  `STABLE_DEPLOY_KEY` deploy key (a ruleset refuses anything else). Don't push to it.
   The Supervisor treats every `config.yaml`/`config.json` in the repo as an add-on, so don't add
   one outside `home-assistant/`.
   Check `git status` before committing:

@@ -425,12 +425,28 @@ publishes only `main` and `sha-<commit>`; its changes reach users with the next 
 
 **The `stable` branch is `latest` for the Home Assistant add-on.** The Supervisor reads the
 add-on's `config.yaml` straight from git, so if it read `main` it would offer a new version the
-moment the PR merged, minutes before that image reached Docker Hub. The release job moves
-`stable` to the merge commit once the image is pushed, before it tags. Nothing else should move
-it. The "Protect stable" ruleset refuses deletion, force pushes, unsigned commits and commits
-without passing `test` and `image` checks. It can't limit pushes to GitHub Actions alone (GitHub
-only allows that on organization repositories), so a repository admin could still move it by
-hand. If that step fails, re-run the job; moving `stable` to the same commit again does nothing.
+moment the PR merged, minutes before that image reached Docker Hub. Once the image is pushed and
+the GitHub release created, the release job pushes the merge commit to `stable`.
+
+- It pushes with a deploy key, because the workflow's own token may not push a commit that
+  changes `.github/workflows/`. The private key is the `STABLE_DEPLOY_KEY` secret in the
+  `release` environment, which only `main` can use.
+- Two rulesets guard `stable`. "Only the release job moves stable" lets nothing but a deploy key
+  update it. "Protect stable", which nothing bypasses, refuses deletion, force pushes, unsigned
+  commits and commits without passing `test` and `image` checks.
+- `stable` is left out of branch builds, since a deploy-key push starts a workflow run.
+- If moving `stable` fails, re-run the job. It skips the existing release, and pushing the same
+  commit again does nothing.
+
+To rotate the key:
+
+```bash
+ssh-keygen -t ed25519 -N "" -C "dapple release job: stable branch" -f stable
+gh repo deploy-key add stable.pub --allow-write --title "Release job: move stable"
+gh secret set STABLE_DEPLOY_KEY --env release < stable
+shred -u stable stable.pub
+gh repo deploy-key list    # then delete the old one: gh repo deploy-key delete <id>
+```
 
 **Dependabot PRs** can't bump the version, so they merge without releasing. Read the lock diff
 before merging one. Their changes ship in the next release PR, whose notes mention anything a
