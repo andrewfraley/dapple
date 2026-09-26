@@ -54,7 +54,7 @@ from app.mqtt import MqttBridge
 from app.pattern import led_colors
 from app.presets import PresetError, PresetStorageError, PresetStore
 from app.state import StateStore, live_state
-from app.supervisor import prefill_mqtt
+from app.supervisor import sync_mqtt
 
 logging.basicConfig(
     level=os.environ.get("DAPPLE_LOG_LEVEL", "INFO").upper(),
@@ -117,8 +117,9 @@ async def lifespan(app: FastAPI):
     # Strands that are simply switched off shouldn't hold up startup. The
     # reference is kept so the task can't be garbage-collected mid-run.
     startup = asyncio.create_task(_startup_refresh(app))
-    # Running as a Home Assistant add-on: offer the Mosquitto login, switched off.
-    await asyncio.to_thread(prefill_mqtt, app.state.strands)
+    # Running as a Home Assistant add-on: offer the Mosquitto login, switched
+    # off, or refresh it if Mosquitto has issued a new one.
+    await asyncio.to_thread(sync_mqtt, app.state.strands)
     app.state.mqtt.start()
     yield
     startup.cancel()

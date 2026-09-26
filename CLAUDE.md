@@ -19,7 +19,7 @@ the API reference and internals. Keep them in their lanes — don't put REST tab
 ## Commands
 
 ```bash
-.venv/bin/python -m pytest -q                 # 338 tests, no network, no strands
+.venv/bin/python -m pytest -q                 # 341 tests, no network, no strands
 .venv/bin/pre-commit run --all-files          # Black + Prettier; the git hook runs this on staged files
 npm --prefix frontend test                    # JS pattern port vs Python fixtures
 npm --prefix frontend run build               # required before the Docker build picks up UI changes
@@ -106,9 +106,11 @@ back, because there nothing happened and the user needs to know. This asymmetry 
 `/api/hassio_ingress/<token>/`: API calls are `api/...`, icons `favicon.svg`, Vite `base: './'`.
 A leading `/` works everywhere except the sidebar, so it won't show up in local testing.
 
-**The Supervisor's broker is filled in, never switched on.** `app/supervisor.py` saves the
-Mosquitto login at startup only when no broker is saved, with `enabled=False`, and does nothing
-without `SUPERVISOR_TOKEN`.
+**The Supervisor's broker is filled in, never switched on.** At startup `sync_mqtt`
+(`app/supervisor.py`) saves the Mosquitto login with `enabled=False` when no broker is saved.
+While the saved host, port and username are still the Supervisor's, it refreshes the password
+(Mosquitto reissues it on reinstall, and the user never sees it), touching nothing else. Any
+other broker is the user's and is left alone. Without `SUPERVISOR_TOKEN` it does nothing.
 
 ## API shape
 

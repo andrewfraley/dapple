@@ -17,8 +17,8 @@ patterns and presets in full.
 
 If the Mosquitto broker app is installed, Dapple has already filled in its **Home Assistant**
 tab. Turn on **Connect to Home Assistant** and press **Save**, and each group appears as a
-light, with your presets as its effects. If you install Mosquitto later, restart this app so
-Dapple picks it up.
+light, with your presets as its effects. If you install Mosquitto later, or reinstall it,
+restart this app so Dapple picks up its login.
 
 [Dapple with Home Assistant](https://github.com/andrewfraley/dapple/blob/main/HOME_ASSISTANT.md)
 has the details, including automations.

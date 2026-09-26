@@ -15,7 +15,8 @@ over MQTT and sets up the lights itself. It's off until you set it up.
 [On Home Assistant OS](README.md#on-home-assistant-os))**, with the Mosquitto broker installed?**
 Dapple has already filled in the broker's address and a login of its own. Open its Home
 Assistant tab, turn on **Connect to Home Assistant** and press **Save**. That's all. If you
-install Mosquitto after Dapple, restart the Dapple app so it picks it up.
+install Mosquitto after Dapple, or reinstall it, restart the Dapple app so it picks up the
+login.
 
 Otherwise:
 

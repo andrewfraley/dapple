@@ -374,8 +374,10 @@ run.
   `#hash`, so the page itself is always at the prefix root.
 - **MQTT.** `services: [mqtt:want]` lets Dapple ask the Supervisor for the Mosquitto add-on's
   address and a login (`app/supervisor.py`). At startup, if no broker is saved yet, Dapple
-  saves that one, switched off. It never overwrites a saved broker, and outside an add-on
-  (`SUPERVISOR_TOKEN` unset) it asks nothing.
+  saves that one, switched off. If the saved broker is still that one (same host, port and
+  username), it takes the current password, since reinstalling Mosquitto issues a new one the
+  user never sees. Any other broker is left alone, and outside an add-on (`SUPERVISOR_TOKEN`
+  unset) it asks nothing.
 - **No host port by default** (`8080/tcp: null`). Ingress reaches the container directly, and
   Home Assistant reaches it as `http://<hostname>:8080`, the hostname being on the add-on's
   Info page.

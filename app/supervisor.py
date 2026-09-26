@@ -4,6 +4,9 @@ The Supervisor hands an add-on that declares ``services: [mqtt:want]`` the
 Mosquitto add-on's address and a login made for it. Dapple writes those into
 the Home Assistant tab so there's nothing to type, but leaves the bridge
 switched off: MQTT only ever starts because someone turned it on.
+
+Reinstalling Mosquitto issues a new password the user never sees, so the login
+is refreshed on every start for as long as it's still the one Mosquitto made.
 """
 
 from __future__ import annotations
@@ -11,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from dataclasses import replace
 import urllib.request
 from collections.abc import Callable, Mapping
 
@@ -60,24 +64,39 @@ def mqtt_service(
         return None
 
 
-def prefill_mqtt(
+def _same_login(saved: MqttConfig, offered: MqttConfig) -> bool:
+    """Whether the saved broker is the one the Supervisor offers, password aside."""
+    return (saved.host, saved.port, saved.username) == (
+        offered.host,
+        offered.port,
+        offered.username,
+    )
+
+
+def sync_mqtt(
     store: ConfigStore, env: Mapping[str, str] | None = None, fetch: Fetch = fetch_json
 ) -> bool:
-    """Save the Supervisor's broker if the user hasn't set one up. True if saved."""
-    if store.config.mqtt is not None:
+    """Save or refresh the Supervisor's broker, never a user's own. True if saved."""
+    offered = mqtt_service(env, fetch)
+    if offered is None:
         return False
-    settings = mqtt_service(env, fetch)
-    if settings is None:
-        return False
+    saved = store.config.mqtt
+    if saved is None:
+        settings = offered
+        message = (
+            "Filled in Home Assistant's MQTT broker (%s:%d). Turn on Connect to Home "
+            "Assistant on the Home Assistant tab to start using it."
+        )
+    elif _same_login(saved, offered) and saved.password != offered.password:
+        # Only the password: switched on or off, and the prefixes, are the user's.
+        settings = replace(saved, password=offered.password)
+        message = "Mosquitto issued Dapple a new password (%s:%d); saved it."
+    else:
+        return False  # unchanged, or a broker or login the user chose
     try:
         store.set_mqtt(settings)
     except ConfigStorageError as exc:
         log.warning("Couldn't save Home Assistant's MQTT broker: %s", exc)
         return False
-    log.info(
-        "Filled in Home Assistant's MQTT broker (%s:%d). Turn on Connect to Home Assistant "
-        "on the Home Assistant tab to start using it.",
-        settings.host,
-        settings.port,
-    )
+    log.info(message, settings.host, settings.port)
     return True
