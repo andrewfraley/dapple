@@ -28,6 +28,7 @@ def default_presets() -> dict[str, Pattern]:
     load with both sliders at the far left.
     """
     return {
+        # Also the editor's starting pattern (STARTING_PATTERN in PatternPage.jsx).
         "Halloween": Pattern(
             slots=[
                 Slot(rgbw=ORANGE, weight=80),
