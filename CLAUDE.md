@@ -19,7 +19,7 @@ the API reference and internals. Keep them in their lanes — don't put REST tab
 ## Commands
 
 ```bash
-.venv/bin/python -m pytest -q                 # 329 tests, no network, no strands
+.venv/bin/python -m pytest -q                 # 341 tests, no network, no strands
 .venv/bin/pre-commit run --all-files          # Black + Prettier; the git hook runs this on staged files
 npm --prefix frontend test                    # JS pattern port vs Python fixtures
 npm --prefix frontend run build               # required before the Docker build picks up UI changes
@@ -102,6 +102,16 @@ keeps the saved one.
 make Home Assistant retry a successful operation. A failed *config* write does 500 and rolls
 back, because there nothing happened and the user needs to know. This asymmetry is deliberate.
 
+**The UI never uses an absolute path.** The Home Assistant add-on serves it under
+`/api/hassio_ingress/<token>/`: API calls are `api/...`, icons `favicon.svg`, Vite `base: './'`.
+A leading `/` works everywhere except the sidebar, so it won't show up in local testing.
+
+**The Supervisor's broker is filled in, never switched on.** At startup `sync_mqtt`
+(`app/supervisor.py`) saves the Mosquitto login with `enabled=False` when no broker is saved.
+While the saved host, port and username are still the Supervisor's, it refreshes the password
+(Mosquitto reissues it on reinstall, and the user never sees it), touching nothing else. Any
+other broker is the user's and is left alone. Without `SUPERVISOR_TOKEN` it does nothing.
+
 ## API shape
 
 Every mutating route names a group — there is no whole-house apply or off. The user chose this
@@ -143,7 +153,7 @@ This repo is open source; `data/` and `.env` are the only places real details ma
 
 - Never copy anything out of `data/`, `.env` or live API responses into tracked files. That covers strand IPs, broker addresses and logins, hostnames, MACs, serials, device names from the Twinkly app, and timestamps.
 - Example addresses are `192.168.40.21`, `.22`, `.30` in docs and UI placeholders (matching
-  `data.example/config.yaml`), `192.168.1.x` for the machine running Dapple (README,
+  `docs/example-config.yaml`), `192.168.1.x` for the machine running Dapple (README,
   HOME_ASSISTANT.md), and `10.0.0.x` in tests. Don't invent new ranges.
 - Screenshots in `docs/` come from a throwaway instance, never the live app or container:
   `scripts/screenshot.sh [page] [out.png] [width] [height]` starts one on a temp data dir with
@@ -181,7 +191,7 @@ reaches every install. Keep every input pinned:
 - Merging to `main` is what releases. If `pyproject.toml` has a version with no `v<version>` tag,
   the `main` build publishes that image version, tags the commit and creates the GitHub release
   from `docs/releases/<version>.md`. So a release is just a PR that bumps the version in
-  `pyproject.toml` and `frontend/package.json`, refreshes both lock files (`uv lock`, and
+  `pyproject.toml`, `frontend/package.json` and `home-assistant/dapple/config.yaml`, refreshes both lock files (`uv lock`, and
   `npm --prefix frontend install --package-lock-only`) and adds the notes file. DEVELOPING.md's
   *Releases* section has the details.
 - Release notes are for people running Dapple, in the voice of README.md: what changed for them
@@ -217,5 +227,10 @@ reaches every install. Keep every input pinned:
   `afraley/dapple:<branch>` for testing on the real strands. Only a release moves `latest`.
   `docker-compose.yml` must stay usable on its own (users download only that file), so anything
   that needs the source goes in the override.
+  The Home Assistant add-on (`home-assistant/dapple/`) runs that same image and is read by the
+  Supervisor from the `stable` branch, which only the release job moves, with the
+  `STABLE_DEPLOY_KEY` deploy key (a ruleset refuses anything else). Don't push to it.
+  The Supervisor treats every `config.yaml`/`config.json` in the repo as an add-on, so don't add
+  one outside `home-assistant/`.
   Check `git status` before committing:
   `data/`, `.env`, `frontend/dist/` and `*.egg-info/` must stay untracked.

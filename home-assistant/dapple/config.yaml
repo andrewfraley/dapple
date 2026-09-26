@@ -1,0 +1,29 @@
+# The Dapple add-on. The Supervisor pulls afraley/dapple:<version>, the same
+# image Docker users run, so `version` must match pyproject.toml (CI checks).
+name: Dapple
+version: "0.6.0"
+slug: dapple
+description: Static multi-color patterns for Twinkly lights
+url: https://github.com/andrewfraley/dapple
+arch:
+  - amd64
+  - aarch64
+image: afraley/dapple
+# The image has its own entrypoint, which fixes up /data and drops root.
+init: false
+startup: application
+boot: auto
+ingress: true
+ingress_port: 8080
+panel_icon: mdi:string-lights
+panel_title: Dapple
+# Off by default: the sidebar needs no port. Turn it on in the Network tab to
+# reach Dapple's page or REST API from elsewhere on the network.
+ports:
+  8080/tcp: null
+ports_description:
+  8080/tcp: Dapple's page and REST API, outside Home Assistant
+# Gives Dapple the Mosquitto add-on's login, so the Home Assistant tab is
+# filled in. It still starts switched off.
+services:
+  - mqtt:want

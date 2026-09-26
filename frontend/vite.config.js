@@ -5,6 +5,9 @@ import react from '@vitejs/plugin-react'
 // uvicorn, so the frontend can be worked on without rebuilding the container.
 export default defineConfig({
   plugins: [react()],
+  // Relative asset URLs: Home Assistant's ingress serves the UI under
+  // /api/hassio_ingress/<token>/, so nothing may assume it lives at /.
+  base: './',
   server: {
     port: 5173,
     proxy: {

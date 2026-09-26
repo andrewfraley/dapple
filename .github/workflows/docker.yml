@@ -9,8 +9,10 @@ name: Build and publish
 on:
   push:
     # Every branch builds, so a feature branch can be pulled and tried on real
-    # strands before it merges. Only main moves `latest`.
-    branches: ["**"]
+    # strands before it merges. Only main moves `latest`. `stable` is left out:
+    # the release job moves it to a commit main already built, with a deploy
+    # key, and unlike the workflow's own token that push starts a run.
+    branches: ["**", "!stable"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
@@ -40,6 +42,12 @@ jobs:
           ui=$(python3 -c 'import json; print(json.load(open("frontend/package.json"))["version"])')
           if [ "$version" != "$ui" ]; then
             echo "::error::pyproject.toml says $version but frontend/package.json says $ui. Bump both."
+            exit 1
+          fi
+          # The add-on pulls afraley/dapple:<its version>, so it has to name this release.
+          addon=$(sed -n 's/^version: *"\{0,1\}\([^"]*\)"\{0,1\} *$/\1/p' home-assistant/dapple/config.yaml)
+          if [ "$version" != "$addon" ]; then
+            echo "::error::pyproject.toml says $version but home-assistant/dapple/config.yaml says ${addon:-nothing}. Bump both."
             exit 1
           fi
           release=false
@@ -149,15 +157,31 @@ jobs:
       github.event_name == 'push' && github.ref == 'refs/heads/main' &&
       needs.test.outputs.release == 'true' && needs.image.outputs.pushed == 'true'
     runs-on: ubuntu-latest
+    # Holds STABLE_DEPLOY_KEY, and only runs on main.
+    environment: release
     permissions:
       contents: write
     steps:
+      # The deploy key, not the workflow's token: that token may not push a
+      # commit that changes .github/workflows/, and moving stable does. Full
+      # history so the push below has every commit it names.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ssh-key: ${{ secrets.STABLE_DEPLOY_KEY }}
+          fetch-depth: 0
+      # Skipped if it already exists, so a re-run gets on to moving stable.
       - name: Tag v${{ needs.test.outputs.version }} and publish the release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.test.outputs.version }}
-        run: >-
-          gh release create "v$VERSION" --target "$GITHUB_SHA"
-          --title "Dapple $VERSION" --notes-file "docs/releases/$VERSION.md"
+        run: |
+          gh release view "v$VERSION" >/dev/null 2>&1 && exit 0
+          gh release create "v$VERSION" --target "$GITHUB_SHA" \
+            --title "Dapple $VERSION" --notes-file "docs/releases/$VERSION.md"
+      # Home Assistant reads the add-on from `stable`, so it only sees a new
+      # version once that version's image exists. After the release, so a
+      # failure here can't hold it up for Docker users. No --force: git refuses
+      # anything but a fast-forward, and pushing the same commit again is a no-op.
+      - name: Move stable to this release, for the Home Assistant add-on
+        run: git push origin "$GITHUB_SHA:refs/heads/stable"
 

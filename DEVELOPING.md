@@ -355,6 +355,41 @@ starts at its own LED 0. That's a bug.
 
 ---
 
+## Home Assistant add-on
+
+`repository.yaml` makes this repository a Home Assistant add-on repository (Home Assistant's
+menus now call add-ons *apps*). The add-on is `home-assistant/dapple/`: `config.yaml`, the
+Documentation tab (`DOCS.md`), the store blurb (`README.md`) and `icon.png`. There's no
+Dockerfile there. The Supervisor pulls `afraley/dapple:<version>`, the same image Docker users
+run.
+
+- **Users add `https://github.com/andrewfraley/dapple#stable`**, not `main`. See
+  [Releases](#releases) for why and how `stable` moves.
+- **The Supervisor treats every `config.json`/`config.yaml` in the repository as an add-on** and
+  logs a warning for each one that doesn't validate. Don't add another file with that name
+  outside `home-assistant/`. The example config is `docs/example-config.yaml` for this reason.
+- **Ingress.** Home Assistant shows the UI in its sidebar under
+  `/api/hassio_ingress/<token>/`, so the frontend must never use an absolute path: API calls
+  are `api/...`, icons are `favicon.svg`, and Vite builds with `base: './'`. Routing is by
+  `#hash`, so the page itself is always at the prefix root.
+- **MQTT.** `services: [mqtt:want]` lets Dapple ask the Supervisor for the Mosquitto add-on's
+  address and a login (`app/supervisor.py`). At startup, if no broker is saved yet, Dapple
+  saves that one, switched off. If the saved broker is still that one (same host, port and
+  username), it takes the current password, since reinstalling Mosquitto issues a new one the
+  user never sees. Any other broker is left alone, and outside an add-on (`SUPERVISOR_TOKEN`
+  unset) it asks nothing.
+- **No host port by default** (`8080/tcp: null`). Ingress reaches the container directly, and
+  Home Assistant reaches it as `http://<hostname>:8080`, the hostname being on the add-on's
+  Info page.
+- **Image user.** Add-ons start as root with a root-owned `/data`. `scripts/entrypoint.sh`
+  chowns it to `PUID` (1000) and drops privileges, as it does on Docker.
+
+**Testing a branch on Home Assistant OS.** Use a *local* add-on, so nothing about the
+repository changes: copy `home-assistant/dapple/` to `/addons/dapple/` on the Home Assistant box
+(the Samba or SSH app can reach it), change `version` in the copy to the branch's image tag
+(e.g. `mqtt-discovery`), then App store → ⋮ → **Check for updates**. It appears under *Local
+apps*. Reinstall it to pull a newer build of the branch.
+
 ## Releases
 
 `.github/workflows/docker.yml` checks formatting and runs the Python and JS tests, then builds a `linux/amd64` +
@@ -376,9 +411,10 @@ a PR, and wait for CI and a review.
 
 **Releasing is a pull request that bumps the version.** In that PR:
 
-1. Set the new version in `pyproject.toml` and `frontend/package.json`. Then run
+1. Set the new version in `pyproject.toml`, `frontend/package.json` and
+   `home-assistant/dapple/config.yaml`. Then run
    `npm --prefix frontend install --package-lock-only` and `uv lock` so both lock files follow.
-   CI fails if the two versions differ or `uv.lock` is stale.
+   CI fails if the versions differ or `uv.lock` is stale.
 2. Add the release notes as `docs/releases/<version>.md`, written for people running Dapple, not
    developers. CI fails on a PR whose version has no tag and no notes file.
 
@@ -386,6 +422,31 @@ When the PR is merged, the `main` build sees a version with no `v<version>` tag.
 image as `latest`, `<version>` and `<major>.<minor>`, then tags the merge commit and creates the
 GitHub release `Dapple <version>` from the notes file. A PR that doesn't bump the version
 publishes only `main` and `sha-<commit>`; its changes reach users with the next release.
+
+**The `stable` branch is `latest` for the Home Assistant add-on.** The Supervisor reads the
+add-on's `config.yaml` straight from git, so if it read `main` it would offer a new version the
+moment the PR merged, minutes before that image reached Docker Hub. Once the image is pushed and
+the GitHub release created, the release job pushes the merge commit to `stable`.
+
+- It pushes with a deploy key, because the workflow's own token may not push a commit that
+  changes `.github/workflows/`. The private key is the `STABLE_DEPLOY_KEY` secret in the
+  `release` environment, which only `main` can use.
+- Two rulesets guard `stable`. "Only the release job moves stable" lets nothing but a deploy key
+  update it. "Protect stable", which nothing bypasses, refuses deletion, force pushes, unsigned
+  commits and commits without passing `test` and `image` checks.
+- `stable` is left out of branch builds, since a deploy-key push starts a workflow run.
+- If moving `stable` fails, re-run the job. It skips the existing release, and pushing the same
+  commit again does nothing.
+
+To rotate the key:
+
+```bash
+ssh-keygen -t ed25519 -N "" -C "dapple release job: stable branch" -f stable
+gh repo deploy-key add stable.pub --allow-write --title "Release job: move stable"
+gh secret set STABLE_DEPLOY_KEY --env release < stable
+shred -u stable stable.pub
+gh repo deploy-key list    # then delete the old one: gh repo deploy-key delete <id>
+```
 
 **Dependabot PRs** can't bump the version, so they merge without releasing. Read the lock diff
 before merging one. Their changes ship in the next release PR, whose notes mention anything a
