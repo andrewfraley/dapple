@@ -9,8 +9,9 @@ name: Build and publish
 on:
   push:
     # Every branch builds, so a feature branch can be pulled and tried on real
-    # strands before it merges. Only main moves `latest`.
-    branches: ["**"]
+    # strands before it merges. Only main moves `latest`. `stable` is only ever
+    # moved to a commit main already built (see the release job).
+    branches: ["**", "!stable"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
@@ -40,6 +41,12 @@ jobs:
           ui=$(python3 -c 'import json; print(json.load(open("frontend/package.json"))["version"])')
           if [ "$version" != "$ui" ]; then
             echo "::error::pyproject.toml says $version but frontend/package.json says $ui. Bump both."
+            exit 1
+          fi
+          # The add-on pulls afraley/dapple:<its version>, so it has to name this release.
+          addon=$(sed -n 's/^version: *"\{0,1\}\([^"]*\)"\{0,1\} *$/\1/p' home-assistant/dapple/config.yaml)
+          if [ "$version" != "$addon" ]; then
+            echo "::error::pyproject.toml says $version but home-assistant/dapple/config.yaml says ${addon:-nothing}. Bump both."
             exit 1
           fi
           release=false
@@ -153,6 +160,15 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Home Assistant reads the add-on from `stable`, so it only sees a new
+      # version once that version's image exists. Fast-forward only, and a
+      # no-op on a re-run, so it goes before the step that can't be repeated.
+      - name: Move stable to this release, for the Home Assistant add-on
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/stable"
+          -f sha="$GITHUB_SHA" -F force=false
       - name: Tag v${{ needs.test.outputs.version }} and publish the release
         env:
           GH_TOKEN: ${{ github.token }}
