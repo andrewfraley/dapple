@@ -143,7 +143,7 @@ This repo is open source; `data/` and `.env` are the only places real details ma
 
 - Never copy anything out of `data/`, `.env` or live API responses into tracked files. That covers strand IPs, broker addresses and logins, hostnames, MACs, serials, device names from the Twinkly app, and timestamps.
 - Example addresses are `192.168.40.21`, `.22`, `.30` in docs and UI placeholders (matching
-  `data.example/config.yaml`), `192.168.1.x` for the machine running Dapple (README,
+  `docs/example-config.yaml`), `192.168.1.x` for the machine running Dapple (README,
   HOME_ASSISTANT.md), and `10.0.0.x` in tests. Don't invent new ranges.
 - Screenshots in `docs/` come from a throwaway instance, never the live app or container:
   `scripts/screenshot.sh [page] [out.png] [width] [height]` starts one on a temp data dir with

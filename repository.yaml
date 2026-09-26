@@ -1,0 +1,6 @@
+# Makes this repository a Home Assistant add-on repository. Users add it by
+# URL with the #stable branch, which the release job moves only once a
+# release's image is on Docker Hub. The add-on itself is in home-assistant/.
+name: Dapple
+url: https://github.com/andrewfraley/dapple
+maintainer: Dapple contributors
