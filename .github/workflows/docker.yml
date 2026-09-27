@@ -87,6 +87,13 @@ jobs:
   image:
     needs: test
     runs-on: ubuntu-latest
+    # A push to a PR branch starts a push run and a pull_request run for the
+    # same commit. Two builds writing the gha cache at once can stall buildx
+    # for many minutes, so the second waits for the first and then finds the
+    # cache fresh. Not cancelled: each run's image check has to finish.
+    concurrency:
+      group: image-${{ github.event.pull_request.head.sha || github.sha }}
+      cancel-in-progress: false
     outputs:
       pushed: ${{ steps.pushed.outputs.pushed }}
     env:
