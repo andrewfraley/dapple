@@ -3,66 +3,65 @@
 # since a hash only proves you got the version you asked for, not that the
 # version is safe.
 #
-# These settings shape routine *version* updates only. Security updates
-# ignore `ignore` and `cooldown` and arrive as soon as there's a fix.
+# Security fixes only. `open-pull-requests-limit: 0` switches off routine
+# version updates for an ecosystem; security updates are a separate feature
+# (Settings → Code security) with their own limit, and still arrive as soon as
+# an advisory has a fix. Taking newer versions otherwise is a deliberate
+# upgrade PR (`uv lock --upgrade`, `npm update`).
 #
-# - cooldown: a new release isn't proposed until it's a week old. Hijacked
-#   packages are usually caught and pulled within days.
-# - Major versions (and new Python/Node releases) are left to a deliberate
-#   upgrade PR: they change APIs and need code changes, not a bot bump.
-# - increase-if-necessary: update the lock file, and leave the version ranges
-#   in pyproject.toml and package.json alone unless an update needs them wider.
+# Nothing is ignored on these: an `ignore` by dependency name blocks security
+# updates too, and a fix should always be proposed.
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
-    cooldown:
-      default-days: 7
+    open-pull-requests-limit: 0
     groups:
       actions:
+        applies-to: security-updates
         patterns: ["*"]
 
   - package-ecosystem: uv
     directory: /
     schedule:
       interval: weekly
-    cooldown:
-      default-days: 7
-    # Every range in pyproject.toml is open-ended (>=), so every new version,
-    # security fixes included, fits without touching it. increase-if-necessary
-    # still raised the lower bounds to the version just locked, which is noise.
+    open-pull-requests-limit: 0
+    # Every range in pyproject.toml is open-ended (>=), so a fix fits without
+    # touching it; only the lock changes.
     versioning-strategy: lockfile-only
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
     groups:
       python:
+        applies-to: security-updates
         patterns: ["*"]
 
   - package-ecosystem: npm
     directory: /frontend
     schedule:
       interval: weekly
-    cooldown:
-      default-days: 7
+    open-pull-requests-limit: 0
     versioning-strategy: increase-if-necessary
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
     groups:
       frontend:
+        applies-to: security-updates
         patterns: ["*"]
 
-  # Only new digests for the same tag (a rebuilt python:3.12-slim with OS
-  # fixes). Moving to a new Python or Node version is a deliberate change.
+  # The one ecosystem left on version updates: Dependabot has no security
+  # updates for images, and a pinned digest never picks up the OS fixes in a
+  # rebuilt python:3.12-slim on its own. Only new digests for the same tag;
+  # moving to a new Python or Node version is a deliberate change. Merging this
+  # PR changes nothing for users until a release, so follow it with a patch
+  # release.
   - package-ecosystem: docker
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     cooldown:
       default-days: 7
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
+    groups:
+      images:
+        patterns: ["*"]

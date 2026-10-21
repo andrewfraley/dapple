@@ -448,10 +448,12 @@ shred -u stable stable.pub
 gh repo deploy-key list    # then delete the old one: gh repo deploy-key delete <id>
 ```
 
-**Dependabot PRs** can't bump the version, so they merge without releasing. Read the lock diff
-before merging one. Their changes ship in the next release PR, whose notes mention anything a
-user would notice. When Dependabot flags a *security* update, open a release soon after merging
-it rather than waiting for other changes.
+**Dependabot PRs** are security fixes for Python, npm and GitHub Actions, plus a monthly new
+digest for the base images (Dependabot has no security updates for images, and a pinned digest
+never picks up OS fixes otherwise). Routine version upgrades are done by hand. Dependabot can't
+bump the version, so its PRs merge without releasing. Read the lock diff before merging one, then
+open a patch release soon after rather than waiting for other changes: until then the fix
+reaches nobody.
 
 **Testing a branch build.** On the machine that runs Dapple, point `docker-compose.yml` at the
 branch tag and pull it:

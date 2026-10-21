@@ -176,11 +176,13 @@ reaches every install. Keep every input pinned:
 - Python only from `uv.lock`, installed with `--require-hashes`. Don't `pip install` anything by
   name in the Dockerfile or CI, and don't build the app as a package: a build backend gets fetched
   unpinned. npm only from `package-lock.json` via `npm ci`.
-- Dependabot (`.github/dependabot.yml`) proposes updates as PRs. When reviewing one, read the
-  lock diff; a new version of a small dependency like `xled` deserves a look at what changed.
-  It's set to ignore major versions and new Python/Node versions, and to wait 7 days after a
-  release. Major upgrades (React, MUI, Vite, a new Python) are their own PR with code changes and
-  a minor release. Don't loosen the config to let Dependabot do them.
+- Dependabot (`.github/dependabot.yml`) proposes **security fixes only** for Python, npm and
+  Actions (`open-pull-requests-limit: 0` switches off version updates). The exception is base
+  images: Dependabot has no security updates for them, so it proposes a new digest for the same
+  tag monthly, which is how OS fixes reach the image. When reviewing one, read the lock diff; a
+  new version of a small dependency like `xled` deserves a look at what changed. Routine upgrades
+  are a deliberate PR (`uv lock --upgrade`, `npm update`), and majors (React, MUI, Vite, a new
+  Python) come with code changes and a minor release. Don't turn version updates back on.
 
 ## Branches, pull requests and releases
 
@@ -209,7 +211,8 @@ reaches every install. Keep every input pinned:
 - Dependabot's PRs can't bump the version or write notes, so they merge without a release. That
   is safe because only a release moves `latest`. When asked for a release, cover every Dependabot
   merge since the last tag (`git log v<last>..main`) and mention any that users would notice. After
-  a Dependabot *security* update is merged, suggest a patch release rather than waiting.
+  a Dependabot security update or base image digest is merged, suggest a patch release rather
+  than waiting: neither reaches anyone until then.
 
 ## Gotchas
 
