@@ -19,6 +19,7 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import EditIcon from '@mui/icons-material/Edit'
+import ScheduleIcon from '@mui/icons-material/Schedule'
 
 // Read by screen readers, invisible on screen: the actions column has no
 // visible heading, but a table header cell still needs a name.
@@ -74,6 +75,11 @@ function StatusCell({ info }) {
  * Order here is the seam — strand 2 picks up where strand 1 stopped. Order
  * between groups is display only.
  */
+function describeSchedule({ time_on: on, time_off: off }) {
+  if (on && off) return `Every day: on at ${on}, off at ${off}`
+  return on ? `Every day: on at ${on}` : `Every day: off at ${off}`
+}
+
 export default function GroupSection({
   group,
   groups,
@@ -90,10 +96,12 @@ export default function GroupSection({
   onRename,
   onDelete,
   onMoveGroup,
+  onSchedule,
 }) {
   const strands = group.strands
   const others = groups.filter((candidate) => candidate.id !== group.id)
   const totalLeds = groupStatus?.total_leds ?? 0
+  const schedule = groupStatus?.schedule
 
   return (
     <Card variant="outlined">
@@ -108,6 +116,11 @@ export default function GroupSection({
                 ? `${strands.length} strand${strands.length === 1 ? '' : 's'} · ${totalLeds} LEDs · one pattern, starting at this group's first LED`
                 : 'No strands yet — this group has nothing to light.'}
             </Typography>
+            {schedule?.enabled && (
+              <Typography variant="caption" color="text.secondary" display="block">
+                {describeSchedule(schedule)}
+              </Typography>
+            )}
           </Box>
           <Stack direction="row" spacing={0.5}>
             <Tooltip describeChild title="Move group up">
@@ -131,6 +144,19 @@ export default function GroupSection({
                   aria-label={`Move ${group.name} down`}
                 >
                   <ArrowDownwardIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Tooltip describeChild title="Schedule">
+              <span>
+                <IconButton
+                  size="small"
+                  disabled={busy}
+                  onClick={onSchedule}
+                  aria-label={`Schedule for ${group.name}`}
+                  color={schedule?.enabled ? 'primary' : 'default'}
+                >
+                  <ScheduleIcon fontSize="small" />
                 </IconButton>
               </span>
             </Tooltip>

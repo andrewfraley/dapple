@@ -73,6 +73,14 @@ export const deletePreset = (name) =>
 
 // ---- configuration ---------------------------------------------------------
 
+export const getGroupSchedule = (id) => request(`api/groups/${encodeURIComponent(id)}/schedule`)
+
+export const saveGroupSchedule = (id, schedule) =>
+  request(`api/groups/${encodeURIComponent(id)}/schedule`, {
+    method: 'PUT',
+    body: JSON.stringify(schedule),
+  })
+
 export const createGroup = (name) =>
   request('api/config/groups', { method: 'POST', body: JSON.stringify({ name }) })
 
