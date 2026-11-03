@@ -22,6 +22,41 @@ PATTERN = Pattern(
 )
 
 
+class FakeTimerResponse:
+    """Enough of a requests.Response for xled's ApplicationResponse to read."""
+
+    raw = object()
+    ok = True
+
+    def __init__(self, code=1000):
+        self.code = code
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return {"code": self.code}
+
+
+class FakeTimerSession:
+    """The one route xled can't carry: a timer POST that includes ``tz``.
+
+    Like the firmware, a POST without ``tz`` blanks it.
+    """
+
+    def __init__(self, control):
+        self.control = control
+        self.code = 1000
+
+    def send(self, request, **kwargs):
+        return None
+
+    def post(self, url, json=None):
+        self.control._record("post_timer", url, json)
+        self.control.timer = {"tz": "", **json}
+        return FakeTimerResponse(self.code)
+
+
 class FakeControl:
     """Stands in for xled's ControlInterface, recording every call."""
 
@@ -35,6 +70,9 @@ class FakeControl:
         self.mode = "off"
         self.brightness = None
         self._session = object()
+        self.base_url = "http://10.0.0.5/xled/v1/"
+        self.session = FakeTimerSession(self)
+        self.timer = {"time_on": -1, "time_off": -1, "time_now": 1000, "tz": "UTC0"}
         #: calls that raise on their first attempt, e.g. {"set_mode": TokenExpiredError()}
         self.fail_once = {}
 
@@ -59,6 +97,10 @@ class FakeControl:
     def get_mode(self):
         self._record("get_mode")
         return {"mode": self.mode}
+
+    def get_timer(self):
+        self._record("get_timer")
+        return self.timer
 
     def get_brightness(self):
         self._record("get_brightness")
@@ -635,3 +677,109 @@ def test_gamma_1_sends_values_through_untouched():
     asyncio.run(manager.apply_pattern("g0", Pattern(slots=[Slot(rgbw=(255, 80, 0, 0), weight=1)])))
 
     assert manager.groups[0].devices[0]._control.movies[-1] == bytes([0, 255, 80, 0])
+
+
+# ---- timers ----------------------------------------------------------------
+
+
+def test_setting_a_timer_sends_the_time_zone():
+    """xled's own set_timer leaves tz out, and the firmware then blanks it."""
+    control = FakeControl()
+    device = make_device(control)
+
+    device.set_timer(61200, 82800, 1000, "CST6CDT,M3.2.0,M11.1.0")
+
+    assert control.timer["tz"] == "CST6CDT,M3.2.0,M11.1.0"
+    assert control.calls[-1][1] == "http://10.0.0.5/xled/v1/timer"
+
+
+def test_clearing_a_timer_leaves_the_clock_and_time_zone_alone():
+    """Clearing also happens to strands that have left Dapple's schedule, so
+    nothing else about them is Dapple's to change."""
+    control = FakeControl()
+    control.timer = {"time_on": 61200, "time_off": 82800, "time_now": 4242, "tz": "CST6CDT"}
+    device = make_device(control)
+
+    device.clear_timer()
+
+    assert control.timer == {"time_on": -1, "time_off": -1, "time_now": 4242, "tz": "CST6CDT"}
+
+
+def test_clearing_a_timer_that_is_already_clear_writes_nothing():
+    control = FakeControl()
+    device = make_device(control)
+
+    device.clear_timer()
+
+    assert "post_timer" not in names(control)
+
+
+def test_a_timer_write_the_firmware_refuses_raises():
+    control = FakeControl()
+    control.session.code = 1103
+    device = make_device(control)
+
+    with pytest.raises(DeviceError):
+        device.set_timer(61200, 82800, 1000, "bad")
+
+
+def test_reading_a_timer_retries_with_a_fresh_token():
+    control = FakeControl()
+    control.fail_once["get_timer"] = TokenExpiredError()
+    device = make_device(control)
+
+    assert device.get_timer().time_now == 1000
+    assert names(control) == ["get_timer", "get_timer"]
+
+
+def test_firmware_that_reports_no_time_zone_reads_as_none():
+    control = FakeControl()
+    control.timer = {"time_on": -1, "time_off": -1, "time_now": 5}
+    device = make_device(control)
+
+    assert device.get_timer().tz is None
+
+
+def timer_manager():
+    config = AppConfig(
+        groups=[
+            GroupConfig(
+                id="tree",
+                name="Tree",
+                devices=[
+                    DeviceConfig(name="One", host="10.0.0.1"),
+                    DeviceConfig(name="Two", host="10.0.0.2"),
+                ],
+            )
+        ]
+    )
+    manager = DeviceManager(config)
+    controls = {}
+    for device in manager.devices:
+        device._control = controls[device.host] = FakeControl()
+        device.reachable = True
+    return manager, controls
+
+
+def test_a_timer_write_can_be_limited_to_one_strand():
+    """Correcting one strand mustn't rewrite its neighbour for no reason."""
+    manager, controls = timer_manager()
+
+    results = asyncio.run(
+        manager.set_timer("tree", 100, 200, lambda: 50, "UTC0", hosts={"10.0.0.2"})
+    )
+
+    assert [result.host for result in results] == ["10.0.0.2"]
+    assert controls["10.0.0.1"].timer["time_on"] == -1
+    assert controls["10.0.0.2"].timer["time_on"] == 100
+
+
+def test_a_strand_that_cannot_be_read_comes_back_as_unreachable():
+    """One unplugged strand mustn't stop the rest of the group being checked."""
+    manager, controls = timer_manager()
+    controls["10.0.0.1"].fail_once["get_timer"] = ApplicationError("nope")
+
+    timers = {timer.host: timer for timer in asyncio.run(manager.read_timers("tree"))}
+
+    assert timers["10.0.0.1"].reachable is False
+    assert timers["10.0.0.2"].reachable is True

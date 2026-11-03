@@ -8,6 +8,7 @@ import AddIcon from '@mui/icons-material/Add'
 
 import * as api from './api.js'
 import GroupDialog from './GroupDialog.jsx'
+import ScheduleDialog from './ScheduleDialog.jsx'
 import GroupSection from './GroupSection.jsx'
 import StrandDialog from './StrandDialog.jsx'
 
@@ -27,6 +28,7 @@ export default function StrandsPage({ groups: groupStatuses, onChanged }) {
   const [busy, setBusy] = useState(false)
   const [editingStrand, setEditingStrand] = useState(null) // null closed, {group} adding
   const [editingGroup, setEditingGroup] = useState(null) // null closed, {} creating
+  const [schedulingGroup, setSchedulingGroup] = useState(null)
   const [dialogError, setDialogError] = useState(null)
 
   const infoFor = (host) => live.find((device) => device.host === host)
@@ -51,7 +53,11 @@ export default function StrandsPage({ groups: groupStatuses, onChanged }) {
     setBusy(true)
     try {
       const result = await action()
-      setMessage({ severity: 'success', text: label })
+      setMessage(
+        result?.warning
+          ? { severity: 'warning', text: `${label}. ${result.warning}` }
+          : { severity: 'success', text: label },
+      )
       await load()
       await onChanged?.()
       return result
@@ -86,6 +92,30 @@ export default function StrandsPage({ groups: groupStatuses, onChanged }) {
               text: `${saved.config.name} saved, but it didn't answer: ${saved.info?.error || 'no response'}`,
             },
       )
+    } catch (error) {
+      setDialogError(error.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onSaveSchedule = async (schedule) => {
+    setBusy(true)
+    setDialogError(null)
+    try {
+      const { results } = await api.saveGroupSchedule(schedulingGroup.id, schedule)
+      const missed = results.filter((result) => !result.ok).map((result) => result.name)
+      setMessage(
+        missed.length
+          ? {
+              severity: 'warning',
+              text: `Schedule saved. ${missed.join(', ')} didn't answer and will pick it up when it's back.`,
+            }
+          : { severity: 'success', text: `Schedule saved for ${schedulingGroup.name}` },
+      )
+      setSchedulingGroup(null)
+      await load()
+      await onChanged?.()
     } catch (error) {
       setDialogError(error.message)
     } finally {
@@ -207,6 +237,7 @@ export default function StrandsPage({ groups: groupStatuses, onChanged }) {
             onMoveStrand={moveStrand}
             onReorderStrand={(position, delta) => reorderStrand(group, position, delta)}
             onRename={() => setEditingGroup(group)}
+            onSchedule={() => setSchedulingGroup(group)}
             onDelete={() => removeGroup(group)}
             onMoveGroup={(delta) => moveGroup(index, delta)}
           />
@@ -247,6 +278,18 @@ export default function StrandsPage({ groups: groupStatuses, onChanged }) {
           setDialogError(null)
         }}
         onSave={onSaveStrand}
+      />
+
+      <ScheduleDialog
+        open={schedulingGroup !== null}
+        group={schedulingGroup}
+        busy={busy}
+        error={dialogError}
+        onClose={() => {
+          setSchedulingGroup(null)
+          setDialogError(null)
+        }}
+        onSave={onSaveSchedule}
       />
 
       <GroupDialog

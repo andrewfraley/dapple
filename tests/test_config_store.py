@@ -13,6 +13,7 @@ from app.config import (
     UnknownGroupError,
     load_config,
     normalize_device,
+    normalize_schedule,
     slugify,
     unique_group_id,
 )
@@ -422,6 +423,7 @@ def test_a_failed_write_changes_nothing(tmp_path):
         lambda: store.move("10.0.0.1", "porch"),
         lambda: store.reorder("tree", ["10.0.0.2", "10.0.0.1"]),
         lambda: store.set_mqtt(MqttConfig(host="10.0.0.50", enabled=True)),
+        lambda: store.set_schedule("tree", normalize_schedule("17:00", "23:00")),
     ]
     for attempt in attempts:
         with pytest.raises(ConfigStorageError):
@@ -429,9 +431,87 @@ def test_a_failed_write_changes_nothing(tmp_path):
 
     assert [(g.id, g.name, [d.host for d in g.devices]) for g in store.groups] == snapshot
     assert store.config.mqtt is None
+    assert store.find_group("tree").schedule is None
 
 
 def test_next_names_count_up(store):
     assert store.next_name() == "Strand 1"
     store.add(strand("Tree", "10.0.0.1"))
     assert store.next_name() == "Strand 2"
+
+
+# ---- schedules -------------------------------------------------------------
+
+
+def test_a_schedule_survives_a_restart(store, tmp_path):
+    """Written and read back through the real YAML, where a bare 17:00 would be a number."""
+    store.create_group("Tree")
+    store.set_schedule("tree", normalize_schedule("17:00", "23:30"))
+
+    loaded = load_config(data_dir=tmp_path, env={})
+
+    assert loaded.groups[0].schedule == normalize_schedule("17:00", "23:30")
+
+
+def test_a_group_with_no_schedule_writes_no_schedule_key(store, tmp_path):
+    """No key is what means hands off the strand's timer, so it can't appear by accident."""
+    store.create_group("Tree")
+
+    document = yaml.safe_load((tmp_path / "config.yaml").read_text())
+
+    assert "schedule" not in document["groups"][0]
+
+
+def test_renaming_a_group_keeps_its_schedule(store):
+    store.create_group("Tree")
+    schedule = normalize_schedule("17:00", "23:00")
+    store.set_schedule("tree", schedule)
+
+    store.rename_group("tree", "Big tree")
+
+    assert store.find_group("tree").schedule == schedule
+
+
+def test_an_unquoted_time_in_the_file_drops_the_schedule_not_the_app(tmp_path, caplog):
+    """YAML 1.1 loads a bare 17:00 as 1020, which must not become some other time."""
+    (tmp_path / "config.yaml").write_text("""
+groups:
+  - id: tree
+    name: Tree
+    schedule:
+      time_on: 17:00
+""")
+
+    loaded = load_config(data_dir=tmp_path, env={})
+
+    assert loaded.groups[0].schedule is None
+    assert "ignoring the schedule" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "time_on, time_off, message",
+    [
+        ("17:00", "17:00", "different"),
+        (None, None, "on time"),
+        ("25:00", None, "17:30"),
+        ("5pm", None, "17:30"),
+    ],
+)
+def test_unusable_schedules_are_refused(time_on, time_off, message):
+    with pytest.raises(ConfigError, match=message):
+        normalize_schedule(time_on, time_off)
+
+
+def test_an_overnight_schedule_is_fine():
+    schedule = normalize_schedule("22:00", "06:00")
+
+    assert (schedule.time_on, schedule.time_off) == ("22:00", "06:00")
+
+
+def test_only_one_time_is_enough():
+    assert normalize_schedule(time_off="23:00").time_on is None
+
+
+def test_a_switched_off_schedule_needs_no_times():
+    """Switching off from a blank form must work, not ask for times it won't use."""
+    assert normalize_schedule(enabled=False).enabled is False

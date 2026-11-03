@@ -7,9 +7,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.actions import GroupActions
-from app.config import AppConfig, ConfigStore, DeviceConfig, MqttConfig, load_config
+from app.config import (
+    AppConfig,
+    ConfigStorageError,
+    ConfigStore,
+    DeviceConfig,
+    MqttConfig,
+    load_config,
+)
 from app.main import app
-from app.models import DeviceInfo, DeviceResult, StrandSegment
+from app.models import DeviceInfo, DeviceResult, ScheduleClock, StrandSegment
 from app.presets import PresetStore, default_presets
 from app.state import StateStore
 
@@ -227,6 +234,38 @@ class FakeBridge:
         self.status = "connecting"
 
 
+class FakeKeeper:
+    """Stands in for schedules.ScheduleKeeper, so route tests run no background loop."""
+
+    def __init__(self):
+        self.pushed = []
+        self.left = []
+        self.results = []
+        self.warning = None
+
+    def start(self, after=None):
+        pass
+
+    async def stop(self):
+        pass
+
+    async def push(self, group_id, hosts=None):
+        self.pushed.append((group_id, hosts))
+        return self.results
+
+    async def read(self, group_id):
+        return []
+
+    def clock(self):
+        return ScheduleClock(
+            zone="America/Chicago", time="12:00", utc_offset_minutes=-360, how_to_change="Set TZ."
+        )
+
+    async def strand_left(self, host, was_scheduled):
+        self.left.append((host, was_scheduled))
+        return self.warning if was_scheduled else None
+
+
 @pytest.fixture
 def config(tmp_path):
     return AppConfig(data_dir=tmp_path, config_path=tmp_path / "config.yaml")
@@ -244,6 +283,7 @@ def build_client(config, manager, seed_presets=True):
     app.state.group_state = StateStore(config.state_path)
     app.state.strands = ConfigStore(config)
     app.state.mqtt = FakeBridge()
+    app.state.schedules = FakeKeeper()
     app.state.actions = GroupActions(manager, app.state.presets, app.state.group_state)
     manager.store = app.state.strands
     return TestClient(app)
@@ -937,3 +977,139 @@ def test_live_state_with_no_strand_answering_is_unknown_not_off(client, manager)
 
 def test_live_state_of_an_unknown_group(client):
     assert client.get("/api/groups/nowhere/live").status_code == 404
+
+
+# ---- schedules -------------------------------------------------------------
+
+SCHEDULE = {"time_on": "17:00", "time_off": "23:00"}
+
+
+def scheduled_groups(client):
+    """Tree is scheduled and holds a strand; Porch has no schedule."""
+    client.post("/api/config/groups", json={"name": "Tree"})
+    client.post("/api/config/groups", json={"name": "Porch"})
+    add(client, "10.0.0.1", name="One", group="tree")
+    assert client.put("/api/groups/tree/schedule", json=SCHEDULE).status_code == 200
+
+
+def test_saving_a_schedule_stores_it_and_pushes_it(client):
+    client.post("/api/config/groups", json={"name": "Tree"})
+
+    response = client.put("/api/groups/tree/schedule", json=SCHEDULE)
+
+    assert response.status_code == 200
+    assert response.json()["schedule"]["time_on"] == "17:00"
+    assert app.state.schedules.pushed == [("tree", None)]
+    groups = {group["id"]: group for group in client.get("/api/groups").json()}
+    assert groups["tree"]["schedule"]["time_off"] == "23:00"
+
+
+def test_reading_a_schedule_says_what_time_zone_it_runs_in(client):
+    """The dialog shows this, so a container still on UTC is obvious before it matters."""
+    client.post("/api/config/groups", json={"name": "Tree"})
+
+    clock = client.get("/api/groups/tree/schedule").json()["clock"]
+
+    assert clock["zone"] == "America/Chicago"
+    assert clock["how_to_change"] == "Set TZ."
+
+
+def test_a_schedule_can_not_name_its_own_time_zone(client):
+    """There's one zone for the install, and it's the container's."""
+    client.post("/api/config/groups", json={"name": "Tree"})
+
+    response = client.put("/api/groups/tree/schedule", json={**SCHEDULE, "timezone": "Asia/Tokyo"})
+
+    assert response.status_code == 422
+
+
+def test_a_strand_that_does_not_answer_does_not_fail_the_save(client):
+    """It's picked up when it returns, so the user's schedule must still be kept."""
+    client.post("/api/config/groups", json={"name": "Tree"})
+    app.state.schedules.results = [
+        DeviceResult(name="One", host="10.0.0.1", ok=False, error="timeout")
+    ]
+
+    response = client.put("/api/groups/tree/schedule", json=SCHEDULE)
+
+    assert response.status_code == 200
+    assert response.json()["results"][0]["ok"] is False
+    assert app.state.strands.find_group("tree").schedule.time_on == "17:00"
+
+
+def test_a_bad_schedule_is_a_400_and_reaches_no_strand(client):
+    client.post("/api/config/groups", json={"name": "Tree"})
+
+    response = client.put("/api/groups/tree/schedule", json={**SCHEDULE, "time_on": "25:00"})
+
+    assert response.status_code == 400
+    assert app.state.schedules.pushed == []
+    assert app.state.strands.find_group("tree").schedule is None
+
+
+def test_a_schedule_for_an_unknown_group_is_a_404(client):
+    assert client.put("/api/groups/nope/schedule", json=SCHEDULE).status_code == 404
+    assert client.get("/api/groups/nope/schedule").status_code == 404
+
+
+def test_a_schedule_that_cannot_be_saved_touches_no_strand(client, monkeypatch):
+    """A 500 has to mean nothing happened, on disk or on the strands."""
+    client.post("/api/config/groups", json={"name": "Tree"})
+
+    def refuse():
+        raise ConfigStorageError("read-only")
+
+    monkeypatch.setattr(app.state.strands, "save", refuse)
+
+    assert client.put("/api/groups/tree/schedule", json=SCHEDULE).status_code == 500
+    assert app.state.schedules.pushed == []
+    assert app.state.strands.find_group("tree").schedule is None
+
+
+def test_a_strand_moved_out_of_a_schedule_gets_its_timer_cleared(client):
+    """Left alone, it would go on switching itself on and off for good."""
+    scheduled_groups(client)
+
+    response = client.put("/api/config/strands/10.0.0.1/group", json={"group": "porch"})
+
+    assert response.status_code == 200
+    assert app.state.schedules.left == [("10.0.0.1", True)]
+
+
+def test_moving_out_of_a_schedule_says_so_when_the_strand_did_not_answer(client):
+    scheduled_groups(client)
+    app.state.schedules.warning = "It will keep following its old schedule."
+
+    response = client.put("/api/config/strands/10.0.0.1/group", json={"group": "porch"})
+
+    assert "old schedule" in response.json()["warning"]
+
+
+def test_a_strand_moved_into_a_schedule_gets_that_schedule(client):
+    scheduled_groups(client)
+    add(client, "10.0.0.2", name="Two", group="porch")
+    app.state.schedules.pushed.clear()
+
+    client.put("/api/config/strands/10.0.0.2/group", json={"group": "tree"})
+
+    assert app.state.schedules.pushed == [("tree", {"10.0.0.2"})]
+    assert app.state.schedules.left == []
+
+
+def test_reordering_within_a_group_leaves_the_timer_alone(client):
+    scheduled_groups(client)
+    app.state.schedules.pushed.clear()
+
+    client.put("/api/config/strands/10.0.0.1/group", json={"group": "tree", "index": 0})
+
+    assert app.state.schedules.pushed == []
+    assert app.state.schedules.left == []
+
+
+def test_removing_a_scheduled_strand_clears_its_timer(client):
+    scheduled_groups(client)
+
+    response = client.delete("/api/config/strands/10.0.0.1")
+
+    assert response.json()["ok"] is True
+    assert app.state.schedules.left == [("10.0.0.1", True)]

@@ -141,6 +141,8 @@ class StrandConfigResult(BaseModel):
     config: StrandConfig
     group: str
     info: DeviceInfo | None = None
+    #: Something the user needs to deal with, though the change itself went through.
+    warning: str | None = None
 
 
 class StrandSegment(BaseModel):
@@ -190,6 +192,65 @@ class GroupLive(BaseModel):
     strands: int = 0
 
 
+class ScheduleModel(BaseModel):
+    """A group's daily on and off times, as saved."""
+
+    enabled: bool
+    time_on: str | None = None
+    time_off: str | None = None
+
+
+class ScheduleUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    time_on: str | None = None
+    time_off: str | None = None
+
+
+class ScheduleClock(BaseModel):
+    """The time zone schedules run in, which comes from the container's ``TZ``."""
+
+    zone: str
+    #: The time there now, as 24-hour HH:MM.
+    time: str
+    #: For comparing with the browser's own offset. Names differ for the same time.
+    utc_offset_minutes: int
+    #: Why ``TZ`` couldn't be used, when it couldn't.
+    problem: str | None = None
+    #: Where to change it. Differs between Docker and the Home Assistant add-on.
+    how_to_change: str
+
+
+class StrandTimer(BaseModel):
+    """A strand's own timer, read from it. Seconds after midnight, -1 for unset."""
+
+    name: str
+    host: str
+    reachable: bool = True
+    time_on: int | None = None
+    time_off: int | None = None
+    time_now: int | None = None
+    #: POSIX TZ string. Undocumented, and None on firmware that doesn't report it.
+    tz: str | None = None
+    #: Whether this is what the group's schedule asks for. None with no schedule.
+    matches: bool | None = None
+
+
+class GroupSchedule(BaseModel):
+    """What's saved beside what the strands are actually set to."""
+
+    schedule: ScheduleModel | None = None
+    strands: list[StrandTimer]
+    clock: ScheduleClock
+
+
+class ScheduleSaved(BaseModel):
+    schedule: ScheduleModel
+    #: The save stands even when a strand fails here; it's retried when it returns.
+    results: list[DeviceResult]
+
+
 class GroupModel(BaseModel):
     """A group as configured."""
 
@@ -209,6 +270,7 @@ class GroupStatus(BaseModel):
     segments: list[StrandSegment]
     reachable: int
     state: GroupState | None = None
+    schedule: ScheduleModel | None = None
 
 
 class GroupCreate(BaseModel):
