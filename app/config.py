@@ -14,6 +14,7 @@ import re
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Mapping
+from zoneinfo import ZoneInfo
 
 import yaml
 
@@ -44,6 +45,9 @@ RESERVED_GROUP_IDS = frozenset({"order", "all", "new"})
 #: MQTT topic segments: no wildcards, no slashes, nothing HA would trip over.
 TOPIC_PREFIX_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 DISCOVERY_PREFIX_PATTERN = re.compile(r"^[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*$")
+
+#: A schedule time: 24-hour, zero-padded, as an HTML time input sends it.
+SCHEDULE_TIME_PATTERN = re.compile(r"^([01][0-9]|2[0-3]):[0-5][0-9]$")
 
 
 class ConfigError(Exception):
@@ -78,6 +82,22 @@ class DeviceConfig:
 
 
 @dataclass(frozen=True)
+class ScheduleConfig:
+    """When a group's strands turn on and off, every day, on their own timers.
+
+    Switching one off keeps the times, and tells Dapple to clear the strands'
+    timers, including on a strand that's unplugged right now once it returns.
+    A group with no schedule at all is left alone, so a timer set in the Twinkly
+    app survives.
+    """
+
+    timezone: str
+    time_on: str | None = None
+    time_off: str | None = None
+    enabled: bool = True
+
+
+@dataclass(frozen=True)
 class GroupConfig:
     """One group and the strands in it, in physical order.
 
@@ -92,6 +112,7 @@ class GroupConfig:
     id: str
     name: str
     devices: list[DeviceConfig] = field(default_factory=list)
+    schedule: ScheduleConfig | None = None
 
 
 @dataclass(frozen=True)
@@ -241,8 +262,39 @@ def _groups_from_yaml(document: object) -> list[GroupConfig]:
                 continue
             seen_hosts.add(device.host)
             devices.append(device)
-        groups.append(GroupConfig(id=group_id, name=name, devices=devices))
+        groups.append(
+            GroupConfig(
+                id=group_id,
+                name=name,
+                devices=devices,
+                schedule=_schedule_from_yaml(entry, group_id),
+            )
+        )
     return groups
+
+
+def _schedule_from_yaml(entry: dict, group_id: str) -> ScheduleConfig | None:
+    """A group's ``schedule:`` block, or None.
+
+    A bad hand edit drops the schedule with a log line rather than stopping the
+    app. The likeliest one is an unquoted time: YAML reads ``17:00`` as the
+    number 1020.
+    """
+    block = entry.get("schedule")
+    if not block:
+        return None
+    try:
+        if not isinstance(block, dict):
+            raise ConfigError("'schedule' must be a mapping")
+        return normalize_schedule(
+            time_on=block.get("time_on"),
+            time_off=block.get("time_off"),
+            timezone=block.get("timezone"),
+            enabled=block.get("enabled", True),
+        )
+    except ConfigError as exc:
+        log.error("config.yaml: ignoring the schedule for group %r: %s", group_id, exc)
+        return None
 
 
 def _mqtt_from_yaml(document: object) -> MqttConfig | None:
@@ -397,6 +449,49 @@ def normalize_mqtt(
     )
 
 
+def _normalize_schedule_time(value: object, label: str) -> str | None:
+    if value is None or value == "":
+        return None
+    if not isinstance(value, str) or not SCHEDULE_TIME_PATTERN.match(value):
+        raise ConfigError(f"The {label} time must look like 17:30 (in config.yaml, in quotes)")
+    return value
+
+
+def normalize_schedule(
+    time_on: object = None,
+    time_off: object = None,
+    timezone: object = None,
+    enabled: bool = True,
+) -> ScheduleConfig:
+    """Validate a schedule. A time left out means that event never happens."""
+    time_on = _normalize_schedule_time(time_on, "on")
+    time_off = _normalize_schedule_time(time_off, "off")
+    if not isinstance(timezone, str) or not timezone.strip():
+        raise ConfigError("A schedule needs a time zone, like America/Chicago")
+    timezone = timezone.strip()
+    try:
+        ZoneInfo(timezone)
+    except (KeyError, ValueError, OSError) as exc:  # not-found is a KeyError
+        raise ConfigError(f"{timezone!r} is not a time zone Dapple knows") from exc
+    if enabled and time_on is None and time_off is None:
+        raise ConfigError("Enter an on time, an off time, or both")
+    if time_on is not None and time_on == time_off:
+        raise ConfigError("The on and off times must be different")
+    return ScheduleConfig(
+        timezone=timezone, time_on=time_on, time_off=time_off, enabled=bool(enabled)
+    )
+
+
+def _schedule_to_yaml(schedule: ScheduleConfig) -> dict:
+    entry: dict = {"enabled": schedule.enabled}
+    if schedule.time_on is not None:
+        entry["time_on"] = schedule.time_on
+    if schedule.time_off is not None:
+        entry["time_off"] = schedule.time_off
+    entry["timezone"] = schedule.timezone
+    return entry
+
+
 def _mqtt_to_yaml(mqtt: MqttConfig) -> dict:
     entry = {"enabled": mqtt.enabled, "host": mqtt.host, "port": mqtt.port}
     if mqtt.username is not None:
@@ -418,11 +513,14 @@ def _device_to_yaml(device: DeviceConfig) -> dict:
 
 
 def _group_to_yaml(group: GroupConfig) -> dict:
-    return {
+    entry = {
         "id": group.id,
         "name": group.name,
         "strands": [_device_to_yaml(device) for device in group.devices],
     }
+    if group.schedule is not None:
+        entry["schedule"] = _schedule_to_yaml(group.schedule)
+    return entry
 
 
 HEADER = """\
@@ -437,6 +535,9 @@ HEADER = """\
 #
 # 'id' is what the API and Home Assistant address. It never changes, so renaming
 # a group is safe.
+#
+# A group's 'schedule' is written by its Schedule button. Keep the times in
+# quotes: YAML reads an unquoted 17:00 as a number.
 #
 # 'mqtt' is written by the Home Assistant tab. The password is stored here in
 # plain text, so keep this file private.
@@ -521,6 +622,16 @@ class ConfigStore:
             for group in self.config.groups
         ]
         self._commit(groups)
+        return self.find_group(group_id)
+
+    def set_schedule(self, group_id: str, schedule: ScheduleConfig | None) -> GroupConfig:
+        self.find_group(group_id)
+        self._commit(
+            [
+                replace(group, schedule=schedule) if group.id == group_id else group
+                for group in self.config.groups
+            ]
+        )
         return self.find_group(group_id)
 
     def delete_group(self, group_id: str) -> None:

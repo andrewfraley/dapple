@@ -17,6 +17,7 @@ import logging
 import threading
 import uuid
 from typing import Any, Callable, Sequence, TypeVar
+from urllib.parse import urljoin
 
 from xled.control import ControlInterface
 from xled.exceptions import (
@@ -24,9 +25,17 @@ from xled.exceptions import (
     AuthenticationError,
     TokenExpiredError,
 )
+from xled.response import ApplicationResponse
 
 from app.config import AppConfig, DeviceConfig, UnknownGroupError, UnknownStrandError
-from app.models import DeviceInfo, DeviceResult, LedProfile, Pattern, StrandSegment
+from app.models import (
+    DeviceInfo,
+    DeviceResult,
+    LedProfile,
+    Pattern,
+    StrandSegment,
+    StrandTimer,
+)
 from app.pattern import DEFAULT_GAMMA, build_frame
 
 log = logging.getLogger(__name__)
@@ -287,6 +296,40 @@ class Device:
     def turn_off(self) -> None:
         self._call(lambda: self.control.set_mode("off"))
 
+    @_one_at_a_time
+    def get_timer(self) -> StrandTimer:
+        response = self._call(self.control.get_timer)
+        return StrandTimer(
+            name=self.name,
+            host=self.host,
+            time_on=int(_get(response, "time_on", -1)),
+            time_off=int(_get(response, "time_off", -1)),
+            time_now=int(_get(response, "time_now", 0)),
+            tz=_get(response, "tz"),
+        )
+
+    @_one_at_a_time
+    def set_timer(self, time_on: int, time_off: int, time_now: int, tz: str | None) -> None:
+        self._call(lambda: self._post_timer(time_on, time_off, time_now, tz))
+
+    @_one_at_a_time
+    def clear_timer(self) -> None:
+        """Stop the timer, leaving the strand's clock and time zone as they are."""
+        current = self.get_timer()
+        if current.time_on == -1 and current.time_off == -1:
+            return
+        self.set_timer(-1, -1, current.time_now, current.tz)
+
+    def _post_timer(self, time_on: int, time_off: int, time_now: int, tz: str | None) -> None:
+        """Written here because xled's set_timer doesn't send ``tz``, and on 2.9.1
+        family G a POST without it blanks the strand's time zone."""
+        payload: dict[str, Any] = {"time_on": time_on, "time_off": time_off, "time_now": time_now}
+        if tz is not None:
+            payload["tz"] = tz
+        control = self.control
+        response = control.session.post(urljoin(control.base_url, "timer"), json=payload)
+        ApplicationResponse(response).raise_for_status()
+
 
 class DeviceGroup:
     """One group's strands, and where each sits in that group's run.
@@ -516,3 +559,48 @@ class DeviceManager:
     async def turn_off(self, group_id: str) -> list[DeviceResult]:
         group = self.group(group_id)
         return await self._fan_out(group.devices, lambda device: device.turn_off())
+
+    # ---- timers ------------------------------------------------------------
+
+    async def read_timers(self, group_id: str) -> list[StrandTimer]:
+        """Each strand's timer. One that doesn't answer has ``reachable=False``."""
+
+        def read(device: Device) -> StrandTimer:
+            try:
+                if not device.reachable:
+                    device.refresh()
+                if device.reachable:
+                    return device.get_timer()
+            except Exception as exc:
+                log.debug("%s: could not read the timer: %s", device.host, exc)
+            return StrandTimer(name=device.name, host=device.host, reachable=False)
+
+        devices = self.group(group_id).devices
+        return list(await asyncio.gather(*(asyncio.to_thread(read, d) for d in devices)))
+
+    async def set_timer(
+        self,
+        group_id: str,
+        time_on: int,
+        time_off: int,
+        time_now: Callable[[], int],
+        tz: str,
+        hosts: set[str] | None = None,
+    ) -> list[DeviceResult]:
+        """``time_now`` is read per strand, as close to the write as possible."""
+        devices = self.group(group_id).devices
+        if hosts is not None:
+            devices = [device for device in devices if device.host in hosts]
+        return await self._fan_out(
+            devices, lambda device: device.set_timer(time_on, time_off, time_now(), tz)
+        )
+
+    async def clear_timer(self, group_id: str, hosts: set[str] | None = None) -> list[DeviceResult]:
+        devices = self.group(group_id).devices
+        if hosts is not None:
+            devices = [device for device in devices if device.host in hosts]
+        return await self._fan_out(devices, lambda device: device.clear_timer())
+
+    async def clear_strand_timer(self, host: str) -> DeviceResult:
+        """For a strand on its way out of a group, or out of Dapple altogether."""
+        return (await self._fan_out([self.get(host)], lambda device: device.clear_timer()))[0]

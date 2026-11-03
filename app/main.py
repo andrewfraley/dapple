@@ -24,6 +24,7 @@ from app.config import (
     load_config,
     normalize_device,
     normalize_mqtt,
+    normalize_schedule,
 )
 from app.devices import DeviceManager
 from app.models import (
@@ -37,6 +38,7 @@ from app.models import (
     GroupModel,
     GroupOrderRequest,
     GroupRename,
+    GroupSchedule,
     GroupStatus,
     HealthResponse,
     MoveStrandRequest,
@@ -46,6 +48,9 @@ from app.models import (
     PreviewRequest,
     PreviewResponse,
     ReorderRequest,
+    ScheduleModel,
+    ScheduleSaved,
+    ScheduleUpdate,
     StrandConfig,
     StrandConfigResult,
     StrandCreate,
@@ -53,6 +58,7 @@ from app.models import (
 from app.mqtt import MqttBridge
 from app.pattern import led_colors
 from app.presets import PresetError, PresetStorageError, PresetStore
+from app.schedules import ScheduleKeeper
 from app.state import StateStore, live_state
 from app.supervisor import sync_mqtt
 
@@ -100,6 +106,8 @@ async def lifespan(app: FastAPI):
         )
     if not hasattr(app.state, "mqtt"):
         app.state.mqtt = MqttBridge(app.state.strands, app.state.actions, version=app.version)
+    if not hasattr(app.state, "schedules"):
+        app.state.schedules = ScheduleKeeper(app.state.strands, app.state.manager)
     # Set here rather than at construction: the bridge needs the actions, and
     # the actions need to tell the bridge.
     app.state.actions.on_change = app.state.mqtt.group_changed
@@ -121,7 +129,9 @@ async def lifespan(app: FastAPI):
     # off, or refresh it if Mosquitto has issued a new one.
     await asyncio.to_thread(sync_mqtt, app.state.strands)
     app.state.mqtt.start()
+    app.state.schedules.start(after=startup)
     yield
+    await app.state.schedules.stop()
     startup.cancel()
     await app.state.mqtt.stop()
 
@@ -170,6 +180,10 @@ def group_state(request: Request) -> StateStore:
 
 def mqtt(request: Request) -> MqttBridge:
     return request.app.state.mqtt
+
+
+def schedules(request: Request) -> ScheduleKeeper:
+    return request.app.state.schedules
 
 
 def actions(request: Request) -> GroupActions:
@@ -243,6 +257,17 @@ async def refresh_devices(request: Request) -> list[DeviceInfo]:
 # ---- groups: status and control -------------------------------------------
 
 
+def _schedule_model(schedule) -> ScheduleModel | None:
+    if schedule is None:
+        return None
+    return ScheduleModel(
+        enabled=schedule.enabled,
+        time_on=schedule.time_on,
+        time_off=schedule.time_off,
+        timezone=schedule.timezone,
+    )
+
+
 def _group_status(request: Request, group) -> GroupStatus:
     """One group as it is right now — configuration, layout and last-applied."""
     return GroupStatus(
@@ -253,6 +278,9 @@ def _group_status(request: Request, group) -> GroupStatus:
         segments=group.segments(),
         reachable=group.reachable(),
         state=group_state(request).get(group.id),
+        schedule=_schedule_model(
+            next((g.schedule for g in strands(request).groups if g.id == group.id), None)
+        ),
     )
 
 
@@ -273,6 +301,34 @@ async def get_group_live(request: Request, group_id: str) -> GroupLive:
     group = manager(request).group(group_id)
     infos = await manager(request).live_state(group.id)
     return live_state(group_state(request).get(group.id), infos, set(presets(request).names()))
+
+
+@app.get("/api/groups/{group_id}/schedule", response_model=GroupSchedule)
+async def get_group_schedule(request: Request, group_id: str) -> GroupSchedule:
+    """Reads the strands, so a timer set elsewhere shows before it's overwritten."""
+    group = strands(request).find_group(group_id)
+    return GroupSchedule(
+        schedule=_schedule_model(group.schedule),
+        strands=await schedules(request).read(group_id),
+    )
+
+
+@app.put("/api/groups/{group_id}/schedule", response_model=ScheduleSaved)
+async def put_group_schedule(
+    request: Request, group_id: str, payload: ScheduleUpdate
+) -> ScheduleSaved:
+    """Saved first, so a failed write is a 500 with no strand touched. A strand
+    that doesn't answer is a failed row, not a failed save: it gets the schedule
+    when it returns."""
+    schedule = normalize_schedule(
+        time_on=payload.time_on,
+        time_off=payload.time_off,
+        timezone=payload.timezone,
+        enabled=payload.enabled,
+    )
+    group = strands(request).set_schedule(group_id, schedule)
+    results = await schedules(request).push(group.id)
+    return ScheduleSaved(schedule=_schedule_model(schedule), results=results)
 
 
 @app.post("/api/groups/{group_id}/apply", response_model=ApplyResponse)
@@ -525,8 +581,19 @@ async def move_strand(
     request: Request, host: str, payload: MoveStrandRequest
 ) -> StrandConfigResult:
     """Move a strand to another group, or reposition it within its own."""
-    device = strands(request).move(host, payload.group, payload.index)
-    return await _resync(request, device.host)
+    store = strands(request)
+    left = store.group_of(host)
+    device = store.move(host, payload.group, payload.index)
+    result = await _resync(request, device.host)
+    joined = store.find_group(payload.group)
+    if joined.id == left.id:
+        return result
+    if joined.schedule is not None:
+        # If it doesn't answer, the regular check catches it when it returns.
+        await schedules(request).push(joined.id, hosts={device.host})
+        return result
+    warning = await schedules(request).strand_left(device.host, left.schedule is not None)
+    return result.model_copy(update={"warning": warning})
 
 
 @app.put("/api/config/strands/{host}", response_model=StrandConfigResult)
@@ -548,9 +615,13 @@ async def update_strand(request: Request, host: str, strand: StrandConfig) -> St
 
 @app.delete("/api/config/strands/{host}")
 async def delete_strand(request: Request, host: str) -> dict:
-    strands(request).delete(host)
+    store = strands(request)
+    was_scheduled = store.group_of(host).schedule is not None
+    store.delete(host)
+    # Before the resync, while the manager still has the strand to talk to.
+    warning = await schedules(request).strand_left(host, was_scheduled)
     await _resync(request)
-    return {"ok": True}
+    return {"ok": True, "warning": warning} if warning else {"ok": True}
 
 
 # ---- UI -------------------------------------------------------------------
