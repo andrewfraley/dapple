@@ -119,6 +119,12 @@ Dapple enforces `-1/-1`. Timer writes go through `Device._post_timer` and always
 Schedules run in the container's `TZ`, one zone per install (the Supervisor sets it on the add-on).
 Don't store a zone in `config.yaml` or take one from the browser, which is only compared with it.
 
+**Brightness is restored once per reboot, never on a timer.** `RebootWatcher` acts only on a real
+reboot of a strand that's still at the firmware's 100, so changes from the Twinkly app survive. The
+level comes from its own once-a-minute readback in `boots.json`, not `state.json`: applying a preset
+with no brightness forgets the level there while the strand keeps showing it. It goes through
+`GroupActions.restore_brightness` and doesn't write `state.json`.
+
 ## API shape
 
 Every mutating route names a group — there is no whole-house apply or off. The user chose this
@@ -144,13 +150,13 @@ HA automations survive a rename.
 - Tests are named as sentences about behavior (`test_two_groups_with_one_pattern_both_start_at_the_beginning`),
   and docstrings say *why the case matters*, not what the code does.
 - Fakes over mocks: `FakeControl` (records xled calls, `fail_once` for retry paths),
-  `FakeManager`/`FakeDevice` (duck-types `DeviceManager` for route tests), `FakeBridge` and `FakeKeeper` (route
+  `FakeManager`/`FakeDevice` (duck-types `DeviceManager` for route tests), `FakeBridge`, `FakeKeeper` and `FakeWatcher` (route
   tests), and `FakeBroker` + `StrandManager` in `tests/test_mqtt.py` (retained messages, and
   strands that remember their mode). Async is driven with
   plain `asyncio.run` — there's no pytest-asyncio dependency.
 - Comments explain the non-obvious *why*. Don't narrate what the line does.
 - Error messages tell the user what to do next ("Move or remove them first").
-- `tests/test_api.py` injects `app.state.{config,manager,presets,group_state,strands,mqtt}` before
+- `tests/test_api.py` injects `app.state.{config,manager,presets,group_state,strands,mqtt,schedules,reboots}` before
   `TestClient(app)` starts; the lifespan's `hasattr` guards are what make that work. Adding a new
   store means adding a guard *and* setting it in `build_client`.
 

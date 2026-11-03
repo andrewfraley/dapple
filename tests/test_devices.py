@@ -69,6 +69,8 @@ class FakeControl:
         self.movies = []
         self.mode = "off"
         self.brightness = None
+        #: The firmware reports this as a string of milliseconds.
+        self.uptime = "3600000"
         self._session = object()
         self.base_url = "http://10.0.0.5/xled/v1/"
         self.session = FakeTimerSession(self)
@@ -88,6 +90,7 @@ class FakeControl:
             "number_of_led": self.number_of_led,
             "led_profile": self.profile,
             "fw_family": self.family,
+            "uptime": self.uptime,
         }
 
     def firmware_version(self):
@@ -783,3 +786,67 @@ def test_a_strand_that_cannot_be_read_comes_back_as_unreachable():
 
     assert timers["10.0.0.1"].reachable is False
     assert timers["10.0.0.2"].reachable is True
+
+
+# ---- reboots ---------------------------------------------------------------
+
+
+def test_uptime_is_read_as_a_number():
+    """The firmware sends a string, and a string compares wrongly without complaint."""
+    control = FakeControl()
+    control.brightness = 20
+    device = make_device(control)
+
+    reading = device.read_boot()
+
+    assert (reading.uptime_ms, reading.brightness) == (3600000, 20)
+
+
+def test_firmware_with_no_uptime_reads_as_none():
+    control = FakeControl()
+    control.uptime = None
+    device = make_device(control)
+
+    assert device.read_boot().uptime_ms is None
+
+
+def boot_manager():
+    config = AppConfig(
+        groups=[
+            GroupConfig(
+                id="tree",
+                name="Tree",
+                devices=[
+                    DeviceConfig(name="One", host="10.0.0.1"),
+                    DeviceConfig(name="Two", host="10.0.0.2"),
+                ],
+            )
+        ]
+    )
+    manager = DeviceManager(config)
+    controls = {}
+    for device in manager.devices:
+        device._control = controls[device.host] = FakeControl()
+        device.reachable = True
+    return manager, controls
+
+
+def test_a_restore_sets_each_strand_to_its_own_level_and_no_others():
+    """Only a strand that rebooted lost its level; its neighbour may have another."""
+    manager, controls = boot_manager()
+
+    results = asyncio.run(manager.set_strand_brightness("tree", {"10.0.0.2": 20}))
+
+    assert [result.host for result in results] == ["10.0.0.2"]
+    assert controls["10.0.0.1"].brightness is None
+    assert controls["10.0.0.2"].brightness == 20
+
+
+def test_a_strand_that_cannot_be_read_does_not_stop_the_others():
+    manager, controls = boot_manager()
+    controls["10.0.0.1"].fail_once["get_brightness"] = ApplicationError("nope")
+
+    readings = {reading.host: reading for reading in asyncio.run(manager.read_boots("tree"))}
+
+    assert readings["10.0.0.1"].uptime_ms is None
+    assert readings["10.0.0.2"].uptime_ms == 3600000

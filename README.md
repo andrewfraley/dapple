@@ -232,13 +232,27 @@ A few things are worth knowing:
 - The lights come on showing whatever the group last showed. A schedule can't choose a preset.
 - If you apply a pattern while the lights are scheduled to be off, they stay on until the next
   off time. If you switch them off by hand, they still come on at the next on time.
-- Unplugging a strand keeps its schedule and its pattern, but its brightness goes back to full.
-  That's how the lights behave, in the Twinkly app as well, so set the brightness again afterwards.
+- Unplugging a strand keeps its schedule and its pattern, but the lights themselves go back to
+  full brightness. Dapple sets the brightness back within about a minute of them reconnecting. See
+  [the section below](#after-a-power-cut).
 - A schedule set here replaces a timer you set in the Twinkly app. If you change it in the app
   while a Dapple schedule is on, Dapple puts its own times back within a few minutes.
 - To stop a schedule, open it and switch it off. Removing a strand from a scheduled group clears
   its timer too. If the strand is unplugged at that moment, Dapple tells you, and you'll need to
   clear it in the Twinkly app.
+
+---
+
+## After a power cut
+
+When lights lose power, they come back with their pattern and schedule but at full brightness.
+Dapple notices they restarted and sets them back to the brightness they were at, usually within a
+minute. It doesn't matter where you set that level: Dapple, Home Assistant and the Twinkly app all
+count. If Dapple was off too, it does this when it starts again.
+
+Dapple checks the lights once a minute, so a change made less than a minute before the power went
+may not be the one that comes back. And if you've already changed the brightness since the power
+came back, it leaves your choice alone.
 
 ---
 
@@ -288,6 +302,7 @@ Everything Dapple remembers lives in the `data` folder next to `docker-compose.y
 |---|---|
 | `config.yaml` | your strands, their addresses, which group each is in, and your Home Assistant connection (including its password, so keep the folder private) |
 | `presets.json` | your saved patterns |
+| `boots.json` | when each strand last started and its brightness, so Dapple can put that back after a power cut |
 | `state.json` | the pattern Dapple last sent to each group (the lights may have been changed since, from the Twinkly app) |
 
 Back up that folder and you've backed up everything. It's all plain text, so you can read and

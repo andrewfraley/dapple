@@ -62,6 +62,16 @@ class GroupActions:
         self._changed(group.id)
         return results
 
+    async def restore_brightness(self, group_id: str, values: dict[str, int]) -> list[DeviceResult]:
+        """Put back what each strand was showing before a power cut.
+
+        Nothing is recorded: nobody asked for a change, this undoes one.
+        """
+        group = self._group(group_id)
+        results = await self.manager.set_strand_brightness(group.id, values)
+        self._changed(group.id)
+        return results
+
     async def turn_on(self, group_id: str) -> list[DeviceResult]:
         group = self._group(group_id)
         results = await self.manager.turn_on(group.id)
