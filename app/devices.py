@@ -16,7 +16,7 @@ import io
 import logging
 import threading
 import uuid
-from typing import Any, Callable, Sequence, TypeVar
+from typing import Any, Callable, NamedTuple, Sequence, TypeVar
 from urllib.parse import urljoin
 
 from xled.control import ControlInterface
@@ -65,6 +65,14 @@ def _get(response: Any, key: str, default: Any = None) -> Any:
 
 class DeviceError(Exception):
     """Anything that stopped us from talking to a strand."""
+
+
+class BootReading(NamedTuple):
+    """How long a strand has been up, and its brightness. None when it can't say."""
+
+    host: str
+    uptime_ms: int | None = None
+    brightness: int | None = None
 
 
 def _one_at_a_time(method: Callable[..., T]) -> Callable[..., T]:
@@ -287,6 +295,16 @@ class Device:
     @_one_at_a_time
     def set_brightness(self, value: int) -> None:
         self._call(lambda: self.control.set_brightness(value))
+
+    @_one_at_a_time
+    def read_boot(self) -> BootReading:
+        info = self._call(self.control.get_device_info)
+        brightness = _get(self._call(self.control.get_brightness), "value")
+        try:
+            uptime_ms = int(_get(info, "uptime"))
+        except (TypeError, ValueError):
+            uptime_ms = None
+        return BootReading(self.host, uptime_ms, brightness)
 
     @_one_at_a_time
     def turn_on(self) -> None:
@@ -548,9 +566,13 @@ class DeviceManager:
 
         return await self._fan_out(group.devices, apply)
 
-    async def set_brightness(self, group_id: str, value: int) -> list[DeviceResult]:
-        group = self.group(group_id)
-        return await self._fan_out(group.devices, lambda device: device.set_brightness(value))
+    async def set_brightness(
+        self, group_id: str, value: int, hosts: set[str] | None = None
+    ) -> list[DeviceResult]:
+        devices = self.group(group_id).devices
+        if hosts is not None:
+            devices = [device for device in devices if device.host in hosts]
+        return await self._fan_out(devices, lambda device: device.set_brightness(value))
 
     async def turn_on(self, group_id: str) -> list[DeviceResult]:
         group = self.group(group_id)
@@ -559,6 +581,24 @@ class DeviceManager:
     async def turn_off(self, group_id: str) -> list[DeviceResult]:
         group = self.group(group_id)
         return await self._fan_out(group.devices, lambda device: device.turn_off())
+
+    # ---- reboots -----------------------------------------------------------
+
+    async def read_boots(self, group_id: str) -> list[BootReading]:
+        """Each strand's uptime. One that doesn't answer reads as all None."""
+
+        def read(device: Device) -> BootReading:
+            try:
+                if not device.reachable:
+                    device.refresh()
+                if device.reachable:
+                    return device.read_boot()
+            except Exception as exc:
+                log.debug("%s: could not read uptime: %s", device.host, exc)
+            return BootReading(device.host)
+
+        devices = self.group(group_id).devices
+        return list(await asyncio.gather(*(asyncio.to_thread(read, d) for d in devices)))
 
     # ---- timers ------------------------------------------------------------
 

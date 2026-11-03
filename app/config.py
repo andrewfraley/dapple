@@ -27,6 +27,7 @@ DEFAULT_DATA_DIR = Path("/data")
 CONFIG_FILENAME = "config.yaml"
 PRESETS_FILENAME = "presets.json"
 STATE_FILENAME = "state.json"
+BOOTS_FILENAME = "boots.json"
 
 
 #: A hostname or IPv4/IPv6 literal — no scheme, no port, no path. Strands speak
@@ -165,6 +166,10 @@ class AppConfig:
     @property
     def state_path(self) -> Path:
         return self.data_dir / STATE_FILENAME
+
+    @property
+    def boots_path(self) -> Path:
+        return self.data_dir / BOOTS_FILENAME
 
 
 # ---- names and ids ---------------------------------------------------------

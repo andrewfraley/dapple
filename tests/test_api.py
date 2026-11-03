@@ -266,6 +266,16 @@ class FakeKeeper:
         return self.warning if was_scheduled else None
 
 
+class FakeWatcher:
+    """Stands in for reboots.RebootWatcher: no background loop in route tests."""
+
+    def start(self, after=None):
+        pass
+
+    async def stop(self):
+        pass
+
+
 @pytest.fixture
 def config(tmp_path):
     return AppConfig(data_dir=tmp_path, config_path=tmp_path / "config.yaml")
@@ -284,6 +294,7 @@ def build_client(config, manager, seed_presets=True):
     app.state.strands = ConfigStore(config)
     app.state.mqtt = FakeBridge()
     app.state.schedules = FakeKeeper()
+    app.state.reboots = FakeWatcher()
     app.state.actions = GroupActions(manager, app.state.presets, app.state.group_state)
     manager.store = app.state.strands
     return TestClient(app)

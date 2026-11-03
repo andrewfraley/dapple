@@ -62,6 +62,21 @@ class GroupActions:
         self._changed(group.id)
         return results
 
+    async def restore_brightness(self, group_id: str, hosts: set[str]) -> list[DeviceResult]:
+        """Put back the brightness strands lost to a power cut.
+
+        Nothing is recorded: this returns them to what state.json already says.
+        With no brightness on record there's nothing to go back to.
+        """
+        group = self._group(group_id)
+        state = self.group_state.get(group.id)
+        value = state.pattern.brightness if state is not None else None
+        if value is None:
+            return []
+        results = await self.manager.set_brightness(group.id, value, hosts=hosts)
+        self._changed(group.id)
+        return results
+
     async def turn_on(self, group_id: str) -> list[DeviceResult]:
         group = self._group(group_id)
         results = await self.manager.turn_on(group.id)

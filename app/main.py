@@ -58,6 +58,7 @@ from app.models import (
 from app.mqtt import MqttBridge
 from app.pattern import led_colors
 from app.presets import PresetError, PresetStorageError, PresetStore
+from app.reboots import BootStore, RebootWatcher
 from app.schedules import ScheduleKeeper
 from app.state import StateStore, live_state
 from app.supervisor import sync_mqtt
@@ -108,6 +109,10 @@ async def lifespan(app: FastAPI):
         app.state.mqtt = MqttBridge(app.state.strands, app.state.actions, version=app.version)
     if not hasattr(app.state, "schedules"):
         app.state.schedules = ScheduleKeeper(app.state.strands, app.state.manager)
+    if not hasattr(app.state, "reboots"):
+        app.state.reboots = RebootWatcher(
+            app.state.manager, app.state.actions, BootStore(config.boots_path)
+        )
     # Set here rather than at construction: the bridge needs the actions, and
     # the actions need to tell the bridge.
     app.state.actions.on_change = app.state.mqtt.group_changed
@@ -130,7 +135,9 @@ async def lifespan(app: FastAPI):
     await asyncio.to_thread(sync_mqtt, app.state.strands)
     app.state.mqtt.start()
     app.state.schedules.start(after=startup)
+    app.state.reboots.start(after=startup)
     yield
+    await app.state.reboots.stop()
     await app.state.schedules.stop()
     startup.cancel()
     await app.state.mqtt.stop()
