@@ -95,6 +95,12 @@ actions:
 
 ---
 
+## Alongside Dapple's schedules
+
+A group's daily schedule runs on the strands themselves. When one switches a group on or off, Home
+Assistant shows the change the next time Dapple reads the strands. If you want different times on
+different days, or a preset at a set time, use a Home Assistant automation instead.
+
 ## Alongside the Twinkly integration
 
 Home Assistant's built-in **Twinkly** integration is fine to keep. The two do different jobs:

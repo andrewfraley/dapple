@@ -19,7 +19,7 @@ the API reference and internals. Keep them in their lanes — don't put REST tab
 ## Commands
 
 ```bash
-.venv/bin/python -m pytest -q                 # 342 tests, no network, no strands
+.venv/bin/python -m pytest -q                 # no network, no strands
 .venv/bin/pre-commit run --all-files          # Black + Prettier; the git hook runs this on staged files
 npm --prefix frontend test                    # JS pattern port vs Python fixtures
 npm --prefix frontend run build               # required before the Docker build picks up UI changes
@@ -112,6 +112,11 @@ While the saved host, port and username are still the Supervisor's, it refreshes
 (Mosquitto reissues it on reinstall, and the user never sees it), touching nothing else. Any
 other broker is the user's and is left alone. Without `SUPERVISOR_TOKEN` it does nothing.
 
+**The strand's timer belongs to Dapple only while its group has a schedule.** A group with no
+`schedule` is never touched, so a timer set in the Twinkly app survives; `enabled: false` means
+Dapple enforces `-1/-1`. Timer writes go through `Device._post_timer` and always carry `tz`: xled's
+`set_timer` leaves it out, and the firmware blanks the strand's time zone when it's missing.
+
 ## API shape
 
 Every mutating route names a group — there is no whole-house apply or off. The user chose this
@@ -137,7 +142,7 @@ HA automations survive a rename.
 - Tests are named as sentences about behavior (`test_two_groups_with_one_pattern_both_start_at_the_beginning`),
   and docstrings say *why the case matters*, not what the code does.
 - Fakes over mocks: `FakeControl` (records xled calls, `fail_once` for retry paths),
-  `FakeManager`/`FakeDevice` (duck-types `DeviceManager` for route tests), `FakeBridge` (route
+  `FakeManager`/`FakeDevice` (duck-types `DeviceManager` for route tests), `FakeBridge` and `FakeKeeper` (route
   tests), and `FakeBroker` + `StrandManager` in `tests/test_mqtt.py` (retained messages, and
   strands that remember their mode). Async is driven with
   plain `asyncio.run` — there's no pytest-asyncio dependency.

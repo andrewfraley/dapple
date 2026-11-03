@@ -165,6 +165,8 @@ Everything under `/api`, JSON in and out, errors as `{"detail": "…"}`. Interac
 | POST | `/api/groups/{group}/brightness` | `{"value": 0-100}` | |
 | POST | `/api/groups/{group}/on` | | back to `movie` mode |
 | POST | `/api/groups/{group}/off` | | leaves the pattern on the strand; it just stops showing it |
+| GET | `/api/groups/{group}/schedule` | | the saved schedule beside each strand's timer, read from it, with `matches` |
+| PUT | `/api/groups/{group}/schedule` | `{"enabled": true, "time_on": "17:00", "time_off": "23:00", "timezone": "America/Chicago"}` | saved even if a strand doesn't answer; those are failed rows in `results` |
 
 The preset name travels in the body rather than the path because preset names contain spaces.
 
@@ -286,6 +288,27 @@ docker run --rm --network host eclipse-mosquitto:2 mosquitto_sub -h <broker> -v 
 
 ---
 
+## Schedules
+
+A schedule is held by the strands' own timer (`/xled/v1/timer`), so it runs with Dapple stopped.
+`ScheduleKeeper` (`app/schedules.py`) writes it on save, then reads every scheduled strand every 5
+minutes and writes only to those that are out: wrong times, wrong `tz`, or a clock more than 60
+seconds off. That one check covers a strand that was unplugged, one moved into the group, drift,
+and someone changing the timer in the Twinkly app.
+
+| Group's `schedule` | What Dapple does to its strands' timers |
+| --- | --- |
+| none | Nothing, so a timer set in the Twinkly app survives |
+| `enabled: true` | Enforces the times, the clock and `tz` |
+| `enabled: false` | Enforces `-1/-1`, keeping the strand's clock and `tz`; the times stay saved |
+
+A strand leaving a scheduled group for one with no schedule, or removed altogether, gets one
+attempt at clearing its timer. Nothing can retry that, so a failure comes back as `warning` in the
+response.
+
+Times are local to the schedule's `timezone`, which the UI fills in from the browser. The
+container's `TZ` isn't used: it defaults to UTC.
+
 ## Talking to a strand directly
 
 `scripts/smoke.py` is the first thing to reach for when hardware misbehaves — it bypasses the
@@ -325,6 +348,18 @@ order problem obvious), `--off`, `--dry-run`. `--help` has the rest.
   alone isn't enough, because the auth handshake goes around it.
 - Verified hardware: Twinkly strands on firmware 2.9.1, family G, 250 LEDs, RGBW. Single-frame
   movies are accepted on that firmware.
+
+### The timer, as tested on firmware 2.9.1 family G
+
+- `GET timer` returns an undocumented `tz`, a POSIX TZ string such as `CST6CDT,M3.2.0,M11.1.0`.
+- **A `POST timer` without `tz` blanks it**, and xled's `set_timer` doesn't send it. That's why
+  `Device._post_timer` exists. Dapple derives `tz` from the footer of the zone's TZif file.
+- Time-off goes to mode `off` and time-on back to `movie`, with the same pattern and brightness.
+- A POST that only changes the clock doesn't disturb what's showing.
+- A power cycle keeps the times, `tz` and pattern, and the clock read correct straight after. It
+  **resets brightness to 100**, which is the firmware's behaviour and not something Dapple corrects.
+- Not tested: whether the firmware applies daylight saving by itself from `tz`. `ScheduleKeeper`
+  corrects the clock either way.
 
 ## Troubleshooting
 

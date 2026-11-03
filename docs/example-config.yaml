@@ -33,6 +33,14 @@ groups:
         # them for that reason.
         # number_of_led: 105
         # led_profile: RGBW
+    # Turn this group on and off at the same times every day, on the strand's own
+    # timer, so it keeps working with Dapple stopped. The Schedule button writes
+    # this. Keep the times in quotes: YAML reads an unquoted 17:00 as a number.
+    # schedule:
+    #   enabled: true
+    #   time_on: "17:00"
+    #   time_off: "23:00"
+    #   timezone: America/Chicago
 
 # Some firmware refuses a single-frame movie. If a pattern uploads without
 # error but the strand stays dark, set this to 2 (the frame is sent twice).

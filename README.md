@@ -28,6 +28,8 @@ computer off, even unplug the lights and plug them back in — the colors come b
   Christmas, July 4th and Warm white are there from the start.
 - **On, off and brightness for each group**, with a switch that shows whether the lights are
   really on. It keeps up when you change them from Home Assistant or the Twinkly app.
+- **A daily schedule for each group.** Pick when a group comes on and goes off. The lights keep
+  to it by themselves, even with Dapple switched off.
 - **Home Assistant, with no YAML.** Each group shows up as a light, with your presets as its
   effects, so dashboards, scenes, automations and voice commands all work. Home Assistant's
   own Twinkly integration can stay installed alongside Dapple. See
@@ -204,6 +206,29 @@ back on.
 
 The switch shows what the lights are really doing. If you turn them off from Home Assistant or
 the Twinkly app, the page catches up within a few seconds.
+
+---
+
+## Turning the lights on and off by the clock
+
+On the Strands tab, the clock button next to a group's name sets its schedule: an on time, an off
+time, or just one of them. The time zone is filled in from your browser.
+
+The times are stored on the lights themselves, so they keep working when Dapple is switched off.
+A few things are worth knowing:
+
+- The same times apply every day. The lights can't hold different times for different days, or
+  more than one on and off a day. Home Assistant can do those.
+- The lights come on showing whatever the group last showed. A schedule can't choose a preset.
+- If you apply a pattern while the lights are scheduled to be off, they stay on until the next
+  off time. If you switch them off by hand, they still come on at the next on time.
+- Unplugging a strand keeps its schedule and its pattern, but its brightness goes back to full.
+  That's how the lights behave, in the Twinkly app as well, so set the brightness again afterwards.
+- A schedule set here replaces a timer you set in the Twinkly app. If you change it in the app
+  while a Dapple schedule is on, Dapple puts its own times back within a few minutes.
+- To stop a schedule, open it and switch it off. Removing a strand from a scheduled group clears
+  its timer too. If the strand is unplugged at that moment, Dapple tells you, and you'll need to
+  clear it in the Twinkly app.
 
 ---
 
