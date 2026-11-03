@@ -431,18 +431,21 @@ apps*. Reinstall it to pull a newer build of the branch.
 ## Releases
 
 `.github/workflows/docker.yml` checks formatting and runs the Python and JS tests, then builds a `linux/amd64` +
-`linux/arm64` image. Pull requests only build it. Pushes publish it to Docker Hub:
+`linux/arm64` image, once per commit. It publishes the image to Docker Hub, except for pull requests
+from forks and Dependabot, which have no credentials and only build it:
 
-| Push | Tags |
+| Build | Tags |
 |---|---|
 | `main`, releasing a new version (below) | `latest`, `1.2.3`, `1.2`, `main`, `sha-<commit>` |
 | `main`, no new version (e.g. a Dependabot bump) | `main`, `sha-<commit>` |
-| any other branch, e.g. `mqtt-discovery` | `mqtt-discovery`, `sha-<commit>` |
+| a pull request from a branch here, e.g. `mqtt-discovery` | `mqtt-discovery`, `sha-<commit>` |
+| a branch with no pull request, started from Actions → Run workflow | the branch name, `sha-<commit>` |
 | tag `v1.2.3` pushed by hand | `1.2.3`, `1.2`, `sha-<commit>` |
 
 `latest` is always the newest release. Nothing else moves it, so work in progress on a branch, or
 a merge that doesn't release, never reaches anyone who runs `latest`.
-Slashes in a branch name become dashes (`feature/x` → `feature-x`).
+Slashes in a branch name become dashes (`feature/x` → `feature-x`). A pull request's image is the
+branch merged with `main`, the same thing CI tests.
 
 **Changes reach `main` only through pull requests, and a person merges them.** Push a branch, open
 a PR, and wait for CI and a review.
