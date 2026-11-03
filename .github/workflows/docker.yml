@@ -8,13 +8,16 @@ name: Build and publish
 
 on:
   push:
-    # Every branch builds, so a feature branch can be pulled and tried on real
-    # strands before it merges. Only main moves `latest`. `stable` is left out:
-    # the release job moves it to a commit main already built, with a deploy
-    # key, and unlike the workflow's own token that push starts a run.
-    branches: ["**", "!stable"]
+    # Branches build through their pull request, not here as well: both would
+    # run for every commit. `stable` is left out too: the release job moves it
+    # to a commit main already built, with a deploy key, and unlike the
+    # workflow's own token that push starts a run.
+    branches: [main]
     tags: ["v*"]
+  # Publishes the branch's image, so it can be pulled and tried on real strands
+  # before it merges. Only main moves `latest`.
   pull_request:
+  # For an image of a branch with no pull request: Actions → Run workflow.
   workflow_dispatch:
 
 # Every action is pinned to a full commit SHA, with its version in a comment.
@@ -87,20 +90,16 @@ jobs:
   image:
     needs: test
     runs-on: ubuntu-latest
-    # A push to a PR branch starts a push run and a pull_request run for the
-    # same commit. Two builds writing the gha cache at once can stall buildx
-    # for many minutes, so the second waits for the first and then finds the
-    # cache fresh. Not cancelled: each run's image check has to finish.
-    concurrency:
-      group: image-${{ github.event.pull_request.head.sha || github.sha }}
-      cancel-in-progress: false
     outputs:
       pushed: ${{ steps.pushed.outputs.pushed }}
     env:
       IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/dapple
-      # Pull requests and forks have no Docker Hub credentials; they still
-      # build, so a broken Dockerfile shows up before merge.
-      PUSH: ${{ github.event_name != 'pull_request' && vars.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+      # Forks and Dependabot have no Docker Hub credentials; they still build,
+      # so a broken Dockerfile shows up before merge. The repository check keeps
+      # a fork's image out of Docker Hub even if a secret ever reached it.
+      PUSH: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+      # A pull request runs on a merge commit nobody can name; tag the branch's own.
+      DOCKER_METADATA_PR_HEAD_SHA: true
       # A push to main (a merged PR) whose version has no tag yet: this build is the release.
       RELEASE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.test.outputs.release == 'true' }}
     steps:
@@ -118,19 +117,28 @@ jobs:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      # The branch name as a tag. type=ref,event=branch doesn't fire on a pull
+      # request. Through env, because a branch name is untrusted text and mustn't
+      # become part of the script. Always set: an empty raw value isn't safe to
+      # hand to the metadata action on a main build, which no PR run would catch.
+      - id: branch
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: echo "tag=$(printf '%s' "$BRANCH" | tr -c 'A-Za-z0-9._-' '-')" >> "$GITHUB_OUTPUT"
+
       - id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.IMAGE != '/dapple' && env.IMAGE || 'dapple' }}
           # `latest` is the newest release, nothing else: it moves only when a
           # merge to main releases a new version (with 1.2.3 and 1.2 alongside).
-          # Any other push, main included, gets its branch name (slashes become
+          # Any other build, main included, gets its branch name (slashes become
           # dashes) and its commit sha, so a merge without a release, like a
           # Dependabot bump, reaches no one running `latest`.
           flavor: latest=false
           tags: |
             type=raw,value=latest,enable=${{ env.RELEASE }}
-            type=ref,event=branch
+            type=raw,value=${{ steps.branch.outputs.tag }},enable=${{ github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/') }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha

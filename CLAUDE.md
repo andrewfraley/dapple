@@ -233,7 +233,7 @@ reaches every install. Keep every input pinned:
   the LinuxServer.io shape — literal values users edit, no `.env` — because that's what
   homelab users already know; only the override reads `DAPPLE_PORT`.
 - The repo is public on GitHub (`andrewfraley/dapple`); the image is `afraley/dapple` on Docker Hub,
-  published by `.github/workflows/docker.yml`. Every branch push publishes
+  published by `.github/workflows/docker.yml`. A pull request from a branch here publishes
   `afraley/dapple:<branch>` for testing on the real strands. Only a release moves `latest`.
   `docker-compose.yml` must stay usable on its own (users download only that file), so anything
   that needs the source goes in the override.
