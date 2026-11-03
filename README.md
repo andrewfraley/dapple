@@ -89,6 +89,9 @@ Assistant connection, so keep it on your home network and don't open the port on
 > **If the page doesn't load**, something else on that computer may already be using port 8080.
 > Open `docker-compose.yml` in a text editor, change `8080:8080` to `8081:8080`, run
 > `docker compose up -d` again, and use `:8081` in the address instead.
+>
+> **Using schedules?** Dapple needs your time zone. Open `docker-compose.yml`, change `TZ=Etc/UTC` to
+> yours (for example `TZ=America/Chicago`), and run `docker compose up -d` again.
 
 ---
 
@@ -212,7 +215,14 @@ the Twinkly app, the page catches up within a few seconds.
 ## Turning the lights on and off by the clock
 
 On the Strands tab, the clock button next to a group's name sets its schedule: an on time, an off
-time, or just one of them. The time zone is filled in from your browser.
+time, or just one of them.
+
+The times use Dapple's time zone. The schedule screen shows it along with what time Dapple thinks it
+is, and warns you if that doesn't match your device. With Docker, set it with `TZ` in your
+`docker-compose.yml` (for example `TZ=America/Chicago`), then run `docker compose up -d`. Restarting
+the container isn't enough to pick up the change. On Home Assistant, Dapple uses Home Assistant's
+own time zone, from Settings → System → General. Your schedules follow a new time zone within a few
+minutes, with nothing to save again.
 
 The times are stored on the lights themselves, so they keep working when Dapple is switched off.
 A few things are worth knowing:

@@ -16,13 +16,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import zoneinfo
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Mapping
 from zoneinfo import ZoneInfo
 
 from app.config import ConfigStore, ScheduleConfig
-from app.models import DeviceResult, StrandTimer
+from app.models import DeviceResult, ScheduleClock, StrandTimer
 
 log = logging.getLogger(__name__)
 
@@ -32,6 +34,36 @@ RECONCILE_SECONDS = 300.0
 #: to be close, and a write per strand per pass would be pointless traffic.
 CLOCK_TOLERANCE_SECONDS = 60
 TIMER_UNSET = -1
+FALLBACK_ZONE = "Etc/UTC"
+
+DOCKER_HOW_TO = (
+    "Set TZ in your docker-compose.yml, then run docker compose up -d. "
+    "Restarting the container isn't enough to pick up a new value."
+)
+ADDON_HOW_TO = "Dapple uses Home Assistant's time zone: Settings → System → General."
+
+
+def container_zone(env: Mapping[str, str] | None = None) -> tuple[str, str | None]:
+    """The zone schedules run in, and what's wrong with ``TZ`` if it isn't usable.
+
+    One zone for the whole install, read from the same variable the logs follow.
+    The Home Assistant Supervisor sets it on add-ons from Home Assistant's own
+    setting, so nobody there has anything to configure.
+    """
+    env = os.environ if env is None else env
+    wanted = env.get("TZ", "").strip().removeprefix(":")
+    if not wanted:
+        return FALLBACK_ZONE, "TZ isn't set, so Dapple is using UTC."
+    try:
+        ZoneInfo(wanted)
+    except (KeyError, ValueError, OSError):  # not-found is a KeyError
+        return FALLBACK_ZONE, f"TZ is {wanted!r}, which isn't a time zone, so Dapple is using UTC."
+    return wanted, None
+
+
+def how_to_change_zone(env: Mapping[str, str] | None = None) -> str:
+    env = os.environ if env is None else env
+    return ADDON_HOW_TO if env.get("SUPERVISOR_TOKEN") else DOCKER_HOW_TO
 
 
 def parse_time(value: str | None) -> int:
@@ -73,7 +105,7 @@ def posix_tz(zone: str) -> str:
 
 
 def timer_matches(
-    schedule: ScheduleConfig, timer: StrandTimer, now: datetime | None = None
+    schedule: ScheduleConfig, timer: StrandTimer, zone: str, now: datetime | None = None
 ) -> bool:
     """Whether a strand already holds what its group's schedule asks for.
 
@@ -87,17 +119,32 @@ def timer_matches(
         parse_time(schedule.time_off),
     ):
         return False
-    if timer.tz is not None and timer.tz != posix_tz(schedule.timezone):
+    if timer.tz is not None and timer.tz != posix_tz(zone):
         return False
-    expected = seconds_after_midnight(schedule.timezone, now)
+    expected = seconds_after_midnight(zone, now)
     return clock_error(timer.time_now or 0, expected) <= CLOCK_TOLERANCE_SECONDS
 
 
 class ScheduleKeeper:
-    def __init__(self, store: ConfigStore, manager):
+    def __init__(self, store: ConfigStore, manager, env: Mapping[str, str] | None = None):
         self.store = store
         self.manager = manager
+        self.zone, self.zone_problem = container_zone(env)
+        self.how_to_change_zone = how_to_change_zone(env)
+        if self.zone_problem:
+            log.warning("%s %s", self.zone_problem, self.how_to_change_zone)
         self._task: asyncio.Task | None = None
+
+    def clock(self, now: datetime | None = None) -> ScheduleClock:
+        """What the schedule dialog shows, so a wrong zone is obvious before it matters."""
+        local = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo(self.zone))
+        return ScheduleClock(
+            zone=self.zone,
+            time=local.strftime("%H:%M"),
+            utc_offset_minutes=int(local.utcoffset().total_seconds() // 60),
+            problem=self.zone_problem,
+            how_to_change=self.how_to_change_zone,
+        )
 
     async def _write(
         self, group_id: str, schedule: ScheduleConfig, hosts: set[str] | None = None
@@ -108,8 +155,8 @@ class ScheduleKeeper:
             group_id,
             parse_time(schedule.time_on),
             parse_time(schedule.time_off),
-            lambda: seconds_after_midnight(schedule.timezone),
-            posix_tz(schedule.timezone),
+            lambda: seconds_after_midnight(self.zone),
+            posix_tz(self.zone),
             hosts=hosts,
         )
 
@@ -128,7 +175,7 @@ class ScheduleKeeper:
             return timers
         return [
             (
-                timer.model_copy(update={"matches": timer_matches(schedule, timer)})
+                timer.model_copy(update={"matches": timer_matches(schedule, timer, self.zone)})
                 if timer.reachable
                 else timer
             )
@@ -162,7 +209,7 @@ class ScheduleKeeper:
             stale = {
                 timer.host
                 for timer in timers
-                if timer.reachable and not timer_matches(group.schedule, timer)
+                if timer.reachable and not timer_matches(group.schedule, timer, self.zone)
             }
             if stale:
                 log.info("Group %s: updating the timer on %s", group.id, ", ".join(sorted(stale)))

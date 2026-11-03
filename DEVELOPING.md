@@ -62,7 +62,7 @@ downloads. In a checkout, `docker-compose.override.yml` adds `build: .`, so
 | Log level | — | `DAPPLE_LOG_LEVEL` | `INFO` |
 | Host port | — | `DAPPLE_PORT` (override only) | `8080` |
 | Run as uid / gid | — | `PUID` / `PGID` | `1000` |
-| Log timezone | — | `TZ` | `Etc/UTC` |
+| Timezone for schedules and logs | — | `TZ` | `Etc/UTC` |
 | Built UI to serve | — | `DAPPLE_STATIC_DIR` | `static/`, else `frontend/dist/` |
 | API behind `npm run dev` | — | `DAPPLE_API` (Vite only) | `http://localhost:8080` |
 
@@ -165,8 +165,8 @@ Everything under `/api`, JSON in and out, errors as `{"detail": "…"}`. Interac
 | POST | `/api/groups/{group}/brightness` | `{"value": 0-100}` | |
 | POST | `/api/groups/{group}/on` | | back to `movie` mode |
 | POST | `/api/groups/{group}/off` | | leaves the pattern on the strand; it just stops showing it |
-| GET | `/api/groups/{group}/schedule` | | the saved schedule beside each strand's timer, read from it, with `matches` |
-| PUT | `/api/groups/{group}/schedule` | `{"enabled": true, "time_on": "17:00", "time_off": "23:00", "timezone": "America/Chicago"}` | saved even if a strand doesn't answer; those are failed rows in `results` |
+| GET | `/api/groups/{group}/schedule` | | the saved schedule beside each strand's timer, read from it, with `matches`, plus the `clock` schedules run on |
+| PUT | `/api/groups/{group}/schedule` | `{"enabled": true, "time_on": "17:00", "time_off": "23:00"}` | saved even if a strand doesn't answer; those are failed rows in `results` |
 
 The preset name travels in the body rather than the path because preset names contain spaces.
 
@@ -306,8 +306,11 @@ A strand leaving a scheduled group for one with no schedule, or removed altogeth
 attempt at clearing its timer. Nothing can retry that, so a failure comes back as `warning` in the
 response.
 
-Times are local to the schedule's `timezone`, which the UI fills in from the browser. The
-container's `TZ` isn't used: it defaults to UTC.
+Times are local to the container's `TZ`, one zone for the whole install. The Supervisor sets `TZ` on
+add-ons from Home Assistant's own setting. If it's missing or isn't a zone, Dapple uses UTC, logs a
+warning and says so in the schedule dialog. The dialog also warns when the zone's offset differs from
+the browser's, which is how someone finds out they never changed the compose file's `Etc/UTC`.
+Changing `TZ` needs no re-save: the next check finds the clock and `tz` wrong and corrects them.
 
 ## Talking to a strand directly
 

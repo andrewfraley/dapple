@@ -264,7 +264,6 @@ def _schedule_model(schedule) -> ScheduleModel | None:
         enabled=schedule.enabled,
         time_on=schedule.time_on,
         time_off=schedule.time_off,
-        timezone=schedule.timezone,
     )
 
 
@@ -310,6 +309,7 @@ async def get_group_schedule(request: Request, group_id: str) -> GroupSchedule:
     return GroupSchedule(
         schedule=_schedule_model(group.schedule),
         strands=await schedules(request).read(group_id),
+        clock=schedules(request).clock(),
     )
 
 
@@ -323,7 +323,6 @@ async def put_group_schedule(
     schedule = normalize_schedule(
         time_on=payload.time_on,
         time_off=payload.time_off,
-        timezone=payload.timezone,
         enabled=payload.enabled,
     )
     group = strands(request).set_schedule(group_id, schedule)

@@ -14,7 +14,6 @@ import re
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Mapping
-from zoneinfo import ZoneInfo
 
 import yaml
 
@@ -88,10 +87,9 @@ class ScheduleConfig:
     Switching one off keeps the times, and tells Dapple to clear the strands'
     timers, including on a strand that's unplugged right now once it returns.
     A group with no schedule at all is left alone, so a timer set in the Twinkly
-    app survives.
+    app survives. The times are in the container's time zone (``TZ``).
     """
 
-    timezone: str
     time_on: str | None = None
     time_off: str | None = None
     enabled: bool = True
@@ -289,7 +287,6 @@ def _schedule_from_yaml(entry: dict, group_id: str) -> ScheduleConfig | None:
         return normalize_schedule(
             time_on=block.get("time_on"),
             time_off=block.get("time_off"),
-            timezone=block.get("timezone"),
             enabled=block.get("enabled", True),
         )
     except ConfigError as exc:
@@ -460,26 +457,16 @@ def _normalize_schedule_time(value: object, label: str) -> str | None:
 def normalize_schedule(
     time_on: object = None,
     time_off: object = None,
-    timezone: object = None,
     enabled: bool = True,
 ) -> ScheduleConfig:
     """Validate a schedule. A time left out means that event never happens."""
     time_on = _normalize_schedule_time(time_on, "on")
     time_off = _normalize_schedule_time(time_off, "off")
-    if not isinstance(timezone, str) or not timezone.strip():
-        raise ConfigError("A schedule needs a time zone, like America/Chicago")
-    timezone = timezone.strip()
-    try:
-        ZoneInfo(timezone)
-    except (KeyError, ValueError, OSError) as exc:  # not-found is a KeyError
-        raise ConfigError(f"{timezone!r} is not a time zone Dapple knows") from exc
     if enabled and time_on is None and time_off is None:
         raise ConfigError("Enter an on time, an off time, or both")
     if time_on is not None and time_on == time_off:
         raise ConfigError("The on and off times must be different")
-    return ScheduleConfig(
-        timezone=timezone, time_on=time_on, time_off=time_off, enabled=bool(enabled)
-    )
+    return ScheduleConfig(time_on=time_on, time_off=time_off, enabled=bool(enabled))
 
 
 def _schedule_to_yaml(schedule: ScheduleConfig) -> dict:
@@ -488,7 +475,6 @@ def _schedule_to_yaml(schedule: ScheduleConfig) -> dict:
         entry["time_on"] = schedule.time_on
     if schedule.time_off is not None:
         entry["time_off"] = schedule.time_off
-    entry["timezone"] = schedule.timezone
     return entry
 
 

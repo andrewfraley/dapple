@@ -12,8 +12,8 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import * as api from './api.js'
 
-// The server's clock may be on UTC, so the zone comes from whoever sets the schedule.
-const browserZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || ''
+// Compared by offset, not name: America/Detroit and America/New_York agree on the time.
+const differsFromBrowser = (clock) => clock.utc_offset_minutes !== -new Date().getTimezoneOffset()
 
 const hasTimer = (strand) =>
   strand.reachable && ((strand.time_on ?? -1) !== -1 || (strand.time_off ?? -1) !== -1)
@@ -23,7 +23,7 @@ export default function ScheduleDialog({ open, group, busy, error, onClose, onSa
   const [enabled, setEnabled] = useState(true)
   const [timeOn, setTimeOn] = useState('')
   const [timeOff, setTimeOff] = useState('')
-  const [timezone, setTimezone] = useState('')
+  const [clock, setClock] = useState(null)
   const [saved, setSaved] = useState(null)
   const [strands, setStrands] = useState([])
   const [loadError, setLoadError] = useState(null)
@@ -37,18 +37,18 @@ export default function ScheduleDialog({ open, group, busy, error, onClose, onSa
     setEnabled(true)
     setTimeOn('')
     setTimeOff('')
-    setTimezone(browserZone())
+    setClock(null)
     api
       .getGroupSchedule(group.id)
       .then((result) => {
         if (!current) return
         setStrands(result.strands)
         setSaved(result.schedule)
+        setClock(result.clock)
         if (result.schedule) {
           setEnabled(result.schedule.enabled)
           setTimeOn(result.schedule.time_on || '')
           setTimeOff(result.schedule.time_off || '')
-          setTimezone(result.schedule.timezone)
         }
       })
       .catch((reason) => current && setLoadError(reason.message))
@@ -66,7 +66,6 @@ export default function ScheduleDialog({ open, group, busy, error, onClose, onSa
       enabled,
       time_on: timeOn || null,
       time_off: timeOff || null,
-      timezone: timezone.trim(),
     })
 
   return (
@@ -113,13 +112,18 @@ export default function ScheduleDialog({ open, group, busy, error, onClose, onSa
               slotProps={{ inputLabel: { shrink: true } }}
             />
           </Stack>
-          <TextField
-            fullWidth
-            label="Time zone"
-            placeholder="America/Chicago"
-            value={timezone}
-            onChange={(event) => setTimezone(event.target.value)}
-          />
+          {clock && (clock.problem || differsFromBrowser(clock)) && (
+            <Alert severity="warning">
+              {clock.problem || "Dapple's time zone is different from this device's."}{' '}
+              {clock.how_to_change}
+            </Alert>
+          )}
+          {clock && (
+            <Typography variant="body2" color="text.secondary">
+              Time zone: {clock.zone}, where it's {clock.time} now.
+              {!clock.problem && !differsFromBrowser(clock) && ` ${clock.how_to_change}`}
+            </Typography>
+          )}
           <Typography variant="caption" color="text.secondary">
             These times repeat every day, and the lights follow them even with Dapple switched off.
             They come on showing whatever the group last showed. Applying a pattern while they're

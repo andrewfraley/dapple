@@ -116,6 +116,8 @@ other broker is the user's and is left alone. Without `SUPERVISOR_TOKEN` it does
 `schedule` is never touched, so a timer set in the Twinkly app survives; `enabled: false` means
 Dapple enforces `-1/-1`. Timer writes go through `Device._post_timer` and always carry `tz`: xled's
 `set_timer` leaves it out, and the firmware blanks the strand's time zone when it's missing.
+Schedules run in the container's `TZ`, one zone per install (the Supervisor sets it on the add-on).
+Don't store a zone in `config.yaml` or take one from the browser, which is only compared with it.
 
 ## API shape
 

@@ -6,7 +6,7 @@ services:
     environment:
       - PUID=1000        # on Linux, what `id -u` prints — the owner of ./data
       - PGID=1000        # on Linux, what `id -g` prints
-      - TZ=Etc/UTC       # e.g. America/Chicago, for log timestamps
+      - TZ=Etc/UTC       # your time zone, e.g. America/Chicago: for schedules and logs
     volumes:
       - ./data:/data:z   # :z is for SELinux (Fedora, RHEL); ignored everywhere else
     ports:

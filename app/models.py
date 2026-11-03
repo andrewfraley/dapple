@@ -198,7 +198,6 @@ class ScheduleModel(BaseModel):
     enabled: bool
     time_on: str | None = None
     time_off: str | None = None
-    timezone: str
 
 
 class ScheduleUpdate(BaseModel):
@@ -207,7 +206,20 @@ class ScheduleUpdate(BaseModel):
     enabled: bool = True
     time_on: str | None = None
     time_off: str | None = None
-    timezone: str
+
+
+class ScheduleClock(BaseModel):
+    """The time zone schedules run in, which comes from the container's ``TZ``."""
+
+    zone: str
+    #: The time there now, as 24-hour HH:MM.
+    time: str
+    #: For comparing with the browser's own offset. Names differ for the same time.
+    utc_offset_minutes: int
+    #: Why ``TZ`` couldn't be used, when it couldn't.
+    problem: str | None = None
+    #: Where to change it. Differs between Docker and the Home Assistant add-on.
+    how_to_change: str
 
 
 class StrandTimer(BaseModel):
@@ -230,6 +242,7 @@ class GroupSchedule(BaseModel):
 
     schedule: ScheduleModel | None = None
     strands: list[StrandTimer]
+    clock: ScheduleClock
 
 
 class ScheduleSaved(BaseModel):

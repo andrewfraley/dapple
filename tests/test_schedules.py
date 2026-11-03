@@ -9,6 +9,8 @@ from app.config import AppConfig, ConfigStore, DeviceConfig, normalize_schedule
 from app.models import DeviceResult, StrandTimer
 from app.schedules import (
     clock_error,
+    container_zone,
+    how_to_change_zone,
     parse_time,
     posix_tz,
     ScheduleKeeper,
@@ -79,7 +81,7 @@ def manager():
 
 @pytest.fixture
 def keeper(store, manager):
-    return ScheduleKeeper(store, manager)
+    return ScheduleKeeper(store, manager, env={"TZ": ZONE})
 
 
 def in_sync(schedule):
@@ -87,8 +89,8 @@ def in_sync(schedule):
     return {
         "time_on": parse_time(schedule.time_on),
         "time_off": parse_time(schedule.time_off),
-        "time_now": seconds_after_midnight(schedule.timezone),
-        "tz": posix_tz(schedule.timezone),
+        "time_now": seconds_after_midnight(ZONE),
+        "tz": posix_tz(ZONE),
     }
 
 
@@ -136,6 +138,67 @@ def test_posix_tz_of_an_unknown_zone_is_blank():
     assert posix_tz("Mars/Olympus") == ""
 
 
+# ---- the container's time zone ---------------------------------------------
+
+
+def test_the_zone_comes_from_tz():
+    assert container_zone({"TZ": "America/Chicago"}) == ("America/Chicago", None)
+
+
+def test_no_tz_falls_back_to_utc_and_says_so():
+    """Silently running hours out is the failure this exists to prevent."""
+    zone, problem = container_zone({})
+
+    assert zone == "Etc/UTC"
+    assert "isn't set" in problem
+
+
+@pytest.mark.parametrize("value", ["Mars/Olympus", "../../etc/passwd", "CST6CDT,M3.2.0,M11.1.0"])
+def test_an_unusable_tz_falls_back_to_utc_and_names_it(value):
+    zone, problem = container_zone({"TZ": value})
+
+    assert zone == "Etc/UTC"
+    assert value in problem
+
+
+def test_utc_on_purpose_is_not_a_problem():
+    """It's the default in docker-compose.yml, and may be exactly what someone wants."""
+    assert container_zone({"TZ": "Etc/UTC"}) == ("Etc/UTC", None)
+
+
+def test_home_assistant_users_are_not_told_to_set_an_env_var():
+    """An add-on's TZ comes from Home Assistant, so there's no variable for them to edit."""
+    assert "Settings" in how_to_change_zone({"SUPERVISOR_TOKEN": "x"})
+    assert "docker-compose.yml" in how_to_change_zone({})
+
+
+def test_the_clock_reports_the_local_time_and_offset(keeper):
+    clock = keeper.clock(NOON)
+
+    assert (clock.zone, clock.time, clock.utc_offset_minutes) == (ZONE, "12:00", -360)
+    assert clock.problem is None
+
+
+def test_the_clock_offset_handles_half_hour_zones(store, manager):
+    """A browser comparison has to agree to the minute, not just the hour."""
+    keeper = ScheduleKeeper(store, manager, env={"TZ": "America/St_Johns"})
+
+    assert keeper.clock(NOON).utc_offset_minutes == -210
+
+
+def test_changing_tz_gets_every_strand_corrected(store, manager):
+    """No re-save: after a restart with a new TZ, the regular check sees it's all wrong."""
+    schedule = normalize_schedule("17:00", "23:00")
+    store.set_schedule("tree", schedule)
+    manager.strand("10.0.0.1", **in_sync(schedule))
+    keeper = ScheduleKeeper(store, manager, env={"TZ": "Asia/Tokyo"})
+
+    asyncio.run(keeper.reconcile())
+
+    assert manager.writes == [("set", "tree", {"10.0.0.1"})]
+    assert manager.timers["10.0.0.1"].tz == posix_tz("Asia/Tokyo")
+
+
 # ---- what counts as in sync ------------------------------------------------
 
 
@@ -145,52 +208,54 @@ def timer(**fields):
 
 @pytest.fixture
 def schedule():
-    return normalize_schedule("17:00", "23:00", ZONE)
+    return normalize_schedule("17:00", "23:00")
 
 
 def test_a_strand_holding_the_schedule_matches(schedule):
     strand = timer(time_on=61200, time_off=82800, time_now=NOON_SECONDS, tz=posix_tz(ZONE))
 
-    assert timer_matches(schedule, strand, NOON)
+    assert timer_matches(schedule, strand, ZONE, NOON)
 
 
 def test_a_clock_a_little_out_still_matches(schedule):
     strand = timer(time_on=61200, time_off=82800, time_now=NOON_SECONDS + 60, tz=posix_tz(ZONE))
 
-    assert timer_matches(schedule, strand, NOON)
+    assert timer_matches(schedule, strand, ZONE, NOON)
 
 
 def test_a_clock_an_hour_out_does_not_match(schedule):
     """What a strand looks like when daylight saving changed and it didn't follow."""
     strand = timer(time_on=61200, time_off=82800, time_now=NOON_SECONDS + 3600, tz=posix_tz(ZONE))
 
-    assert not timer_matches(schedule, strand, NOON)
+    assert not timer_matches(schedule, strand, ZONE, NOON)
 
 
 def test_different_times_do_not_match(schedule):
     strand = timer(time_on=60000, time_off=82800, time_now=NOON_SECONDS, tz=posix_tz(ZONE))
 
-    assert not timer_matches(schedule, strand, NOON)
+    assert not timer_matches(schedule, strand, ZONE, NOON)
 
 
 def test_a_blanked_time_zone_does_not_match(schedule):
     strand = timer(time_on=61200, time_off=82800, time_now=NOON_SECONDS, tz="")
 
-    assert not timer_matches(schedule, strand, NOON)
+    assert not timer_matches(schedule, strand, ZONE, NOON)
 
 
 def test_firmware_without_a_time_zone_can_still_match(schedule):
     """No tz reported means there's nothing to correct; it mustn't be rewritten forever."""
     strand = timer(time_on=61200, time_off=82800, time_now=NOON_SECONDS, tz=None)
 
-    assert timer_matches(schedule, strand, NOON)
+    assert timer_matches(schedule, strand, ZONE, NOON)
 
 
 def test_a_switched_off_schedule_only_cares_that_the_timer_is_off():
-    schedule = normalize_schedule("17:00", "23:00", ZONE, enabled=False)
+    schedule = normalize_schedule("17:00", "23:00", enabled=False)
 
-    assert timer_matches(schedule, timer(time_on=-1, time_off=-1, time_now=5, tz="other"), NOON)
-    assert not timer_matches(schedule, timer(time_on=61200, time_off=-1, time_now=5), NOON)
+    assert timer_matches(
+        schedule, timer(time_on=-1, time_off=-1, time_now=5, tz="other"), ZONE, NOON
+    )
+    assert not timer_matches(schedule, timer(time_on=61200, time_off=-1, time_now=5), ZONE, NOON)
 
 
 # ---- reconcile -------------------------------------------------------------
@@ -261,7 +326,7 @@ def test_a_group_with_no_schedule_is_left_alone(manager, keeper):
 
 def test_a_switched_off_schedule_clears_a_timer_that_is_still_set(store, manager, keeper):
     """Including on a strand that was unplugged when the schedule was switched off."""
-    store.set_schedule("tree", normalize_schedule("17:00", "23:00", ZONE, enabled=False))
+    store.set_schedule("tree", normalize_schedule("17:00", "23:00", enabled=False))
     manager.strand("10.0.0.1", time_on=61200, time_off=82800, time_now=5, tz="UTC0")
 
     asyncio.run(keeper.reconcile())

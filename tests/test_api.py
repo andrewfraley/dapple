@@ -16,7 +16,7 @@ from app.config import (
     load_config,
 )
 from app.main import app
-from app.models import DeviceInfo, DeviceResult, StrandSegment
+from app.models import DeviceInfo, DeviceResult, ScheduleClock, StrandSegment
 from app.presets import PresetStore, default_presets
 from app.state import StateStore
 
@@ -255,6 +255,11 @@ class FakeKeeper:
 
     async def read(self, group_id):
         return []
+
+    def clock(self):
+        return ScheduleClock(
+            zone="America/Chicago", time="12:00", utc_offset_minutes=-360, how_to_change="Set TZ."
+        )
 
     async def strand_left(self, host, was_scheduled):
         self.left.append((host, was_scheduled))
@@ -976,7 +981,7 @@ def test_live_state_of_an_unknown_group(client):
 
 # ---- schedules -------------------------------------------------------------
 
-SCHEDULE = {"time_on": "17:00", "time_off": "23:00", "timezone": "America/Chicago"}
+SCHEDULE = {"time_on": "17:00", "time_off": "23:00"}
 
 
 def scheduled_groups(client):
@@ -996,7 +1001,26 @@ def test_saving_a_schedule_stores_it_and_pushes_it(client):
     assert response.json()["schedule"]["time_on"] == "17:00"
     assert app.state.schedules.pushed == [("tree", None)]
     groups = {group["id"]: group for group in client.get("/api/groups").json()}
-    assert groups["tree"]["schedule"]["timezone"] == "America/Chicago"
+    assert groups["tree"]["schedule"]["time_off"] == "23:00"
+
+
+def test_reading_a_schedule_says_what_time_zone_it_runs_in(client):
+    """The dialog shows this, so a container still on UTC is obvious before it matters."""
+    client.post("/api/config/groups", json={"name": "Tree"})
+
+    clock = client.get("/api/groups/tree/schedule").json()["clock"]
+
+    assert clock["zone"] == "America/Chicago"
+    assert clock["how_to_change"] == "Set TZ."
+
+
+def test_a_schedule_can_not_name_its_own_time_zone(client):
+    """There's one zone for the install, and it's the container's."""
+    client.post("/api/config/groups", json={"name": "Tree"})
+
+    response = client.put("/api/groups/tree/schedule", json={**SCHEDULE, "timezone": "Asia/Tokyo"})
+
+    assert response.status_code == 422
 
 
 def test_a_strand_that_does_not_answer_does_not_fail_the_save(client):
@@ -1016,7 +1040,7 @@ def test_a_strand_that_does_not_answer_does_not_fail_the_save(client):
 def test_a_bad_schedule_is_a_400_and_reaches_no_strand(client):
     client.post("/api/config/groups", json={"name": "Tree"})
 
-    response = client.put("/api/groups/tree/schedule", json={**SCHEDULE, "timezone": "Mars/Base"})
+    response = client.put("/api/groups/tree/schedule", json={**SCHEDULE, "time_on": "25:00"})
 
     assert response.status_code == 400
     assert app.state.schedules.pushed == []
