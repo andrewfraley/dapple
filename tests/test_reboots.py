@@ -40,11 +40,10 @@ class Strands:
             for host, strand in self.strands.items()
         ]
 
-    async def set_brightness(self, group_id, value, hosts=None):
+    async def set_strand_brightness(self, group_id, values):
         results = []
-        for host, strand in self.strands.items():
-            if hosts is not None and host not in hosts:
-                continue
+        for host, value in values.items():
+            strand = self.strands[host]
             self.writes.append((host, value))
             if not strand.refuses:
                 strand.brightness = value
@@ -72,75 +71,129 @@ class World:
             self.manager, self.actions, BootStore(self.path), clock=lambda: self.now
         )
 
-    def applied(self, brightness=20):
-        pattern = Pattern(slots=[Slot(rgbw=(255, 0, 0, 0))], brightness=brightness)
-        self.state.record("tree", pattern)
+    def wait(self, seconds):
+        self.now += seconds
+        for strand in self.manager.strands.values():
+            strand.uptime += seconds
 
     def power_cut(self, *hosts):
-        """Time passes, the strands restart at full brightness."""
-        self.now += 2 * HOUR
-        for host, strand in self.manager.strands.items():
-            if host in hosts:
-                strand.uptime = 60
-                strand.brightness = 100
-            else:
-                strand.uptime += 2 * HOUR
+        """Time passes, and these strands restart at full brightness."""
+        self.wait(2 * HOUR)
+        for host in hosts:
+            self.manager.strands[host].uptime = 60
+            self.manager.strands[host].brightness = 100
+
+    def set_level(self, value, *hosts):
+        """Changed by anything at all: the strand is all Dapple asks."""
+        for host in hosts or self.manager.strands:
+            self.manager.strands[host].brightness = value
 
     def check(self):
         asyncio.run(self.watcher.check())
 
 
+ONE, TWO = "10.0.0.1", "10.0.0.2"
+
+
 @pytest.fixture
 def world(tmp_path):
-    return World(tmp_path, "10.0.0.1", "10.0.0.2")
+    return World(tmp_path, ONE, TWO)
 
 
 def test_a_power_cut_gets_the_last_brightness_back(world):
-    world.applied(brightness=20)
     world.check()
 
-    world.power_cut("10.0.0.1", "10.0.0.2")
+    world.power_cut(ONE, TWO)
     world.check()
 
-    assert sorted(world.manager.writes) == [("10.0.0.1", 20), ("10.0.0.2", 20)]
+    assert sorted(world.manager.writes) == [(ONE, 20), (TWO, 20)]
     assert world.changed == ["tree"]
 
 
+def test_a_level_changed_outside_dapple_is_the_one_that_comes_back(world):
+    """Home Assistant's own Twinkly integration or the Twinkly app: Dapple sent neither."""
+    world.check()
+    world.wait(60)
+    world.set_level(40)
+    world.check()
+
+    world.power_cut(ONE)
+    world.check()
+
+    assert world.manager.writes == [(ONE, 40)]
+
+
+def test_applying_a_preset_with_no_brightness_does_not_lose_the_level(world):
+    """All the built-in presets are like this. state.json forgets the level, the strand
+    doesn't, and a restore based on state.json left these lights at full brightness."""
+    world.state.record("tree", Pattern(slots=[Slot(rgbw=(255, 0, 0, 0))], brightness=None))
+    world.check()
+
+    world.power_cut(ONE)
+    world.check()
+
+    assert world.manager.writes == [(ONE, 20)]
+
+
+def test_a_group_that_was_never_applied_to_still_gets_its_level_back(world):
+    """state.json has nowhere to keep this one at all."""
+    assert world.state.get("tree") is None
+    world.check()
+
+    world.power_cut(ONE)
+    world.check()
+
+    assert world.manager.writes == [(ONE, 20)]
+
+
+def test_strands_in_a_group_get_their_own_levels_back(world):
+    world.check()
+    world.wait(60)
+    world.set_level(40, TWO)
+    world.check()
+
+    world.power_cut(ONE, TWO)
+    world.check()
+
+    assert sorted(world.manager.writes) == [(ONE, 20), (TWO, 40)]
+
+
 def test_only_the_strand_that_lost_power_is_touched(world):
-    world.applied()
     world.check()
 
-    world.power_cut("10.0.0.2")
+    world.power_cut(TWO)
     world.check()
 
-    assert world.manager.writes == [("10.0.0.2", 20)]
+    assert world.manager.writes == [(TWO, 20)]
 
 
 def test_it_restores_once_not_on_every_check(world):
     """Repeating it would undo a later change in the Twinkly app within a minute."""
-    world.applied()
     world.check()
-    world.power_cut("10.0.0.1")
+    world.power_cut(ONE)
     world.check()
     world.manager.writes.clear()
 
-    world.manager.strands["10.0.0.1"].brightness = 100  # someone wants it bright
-    world.manager.strands["10.0.0.1"].uptime += 60
-    world.now += 60
+    world.wait(60)
+    world.check()
+    world.wait(60)
+    world.set_level(100, ONE)  # someone wants it bright
+    world.check()
+    world.wait(60)
     world.check()
 
     assert world.manager.writes == []
+    assert world.manager.strands[ONE].brightness == 100
 
 
-def test_no_reboot_means_no_write(world):
-    """A brightness changed elsewhere stays changed, even at the value a reboot gives."""
-    world.applied()
+def test_a_full_brightness_someone_chose_stays_full(world):
+    """No reboot, so 100 is a choice, and the next power cut should keep it too."""
     world.check()
-    world.now += HOUR
-    for strand in world.manager.strands.values():
-        strand.uptime += HOUR
-        strand.brightness = 100
+    world.wait(60)
+    world.set_level(100)
+    world.check()
 
+    world.power_cut(ONE)
     world.check()
 
     assert world.manager.writes == []
@@ -148,9 +201,7 @@ def test_no_reboot_means_no_write(world):
 
 def test_first_sight_of_a_strand_changes_nothing(world):
     """Upgrading to this, or adding a strand, says nothing about what it should show."""
-    world.applied()
-    for strand in world.manager.strands.values():
-        strand.brightness = 100
+    world.set_level(100)
 
     world.check()
 
@@ -159,116 +210,132 @@ def test_first_sight_of_a_strand_changes_nothing(world):
 
 def test_a_brightness_already_changed_since_the_reboot_is_kept(world):
     """Someone got there first, and it's theirs."""
-    world.applied(brightness=20)
     world.check()
-    world.power_cut("10.0.0.1")
-    world.manager.strands["10.0.0.1"].brightness = 40
+    world.power_cut(ONE)
+    world.set_level(40, ONE)
 
     world.check()
 
     assert world.manager.writes == []
+
+    world.power_cut(ONE)
+    world.check()
+    assert world.manager.writes == [(ONE, 40)]
 
 
 def test_an_outage_during_which_dapple_was_also_down_is_noticed(world):
-    world.applied()
     world.check()
 
-    world.power_cut("10.0.0.1")
+    world.power_cut(ONE)
     world.watcher = world.new_watcher()
     world.check()
 
-    assert world.manager.writes == [("10.0.0.1", 20)]
+    assert world.manager.writes == [(ONE, 20)]
 
 
 def test_restarting_dapple_alone_is_not_a_reboot(world):
-    world.applied()
     world.check()
 
     world.watcher = world.new_watcher()
-    world.now += 30
-    for strand in world.manager.strands.values():
-        strand.uptime += 30
-        strand.brightness = 100
+    world.wait(30)
+    world.set_level(100)
     world.check()
 
     assert world.manager.writes == []
 
 
-def test_a_little_clock_wobble_is_not_a_reboot(world):
+def test_a_little_clock_wobble_across_a_restart_is_not_a_reboot(world):
     """Boot time comes from two clocks, so it never comes out quite the same."""
-    world.applied()
     world.check()
 
+    world.watcher = world.new_watcher()
     world.now += 200  # the strand's uptime has fallen behind by 200 seconds
-    for strand in world.manager.strands.values():
-        strand.brightness = 100
+    world.set_level(100)
+    world.check()
+
+    assert world.manager.writes == []
+
+
+def test_a_second_reboot_soon_after_the_first_is_still_a_reboot(world):
+    """Power often flickers. Missing this one would save the firmware's 100 as the level."""
+    world.check()
+    world.power_cut(ONE)
+    world.check()
+    assert world.manager.writes == [(ONE, 20)]
+    world.check()  # settles on the new uptime
+
+    world.wait(120)
+    world.manager.strands[ONE].uptime = 30
+    world.manager.strands[ONE].brightness = 100
+    world.check()
+
+    assert world.manager.writes == [(ONE, 20), (ONE, 20)]
+    assert world.manager.strands[ONE].brightness == 20
+
+
+def test_a_second_reboot_is_caught_even_when_uptime_has_not_gone_backwards(world):
+    """Unreachable for a while in between, so its new uptime can be as high as the last."""
+    world.check()
+    world.power_cut(ONE)
+    world.check()
+
+    world.power_cut(ONE)  # back at the same uptime as the reading before
+    world.check()
+
+    assert world.manager.writes == [(ONE, 20), (ONE, 20)]
+
+
+def test_a_little_wobble_while_running_is_not_a_reboot(world):
+    world.check()
+
+    world.now += 20  # a slow request: the clock moved and the uptime reading didn't
+    world.set_level(100)
     world.check()
 
     assert world.manager.writes == []
 
 
 def test_a_strand_that_comes_back_later_is_restored_when_it_answers(world):
-    world.applied()
     world.check()
-    world.power_cut("10.0.0.1")
-    world.manager.strands["10.0.0.1"].answering = False
+    world.power_cut(ONE)
+    world.manager.strands[ONE].answering = False
 
     world.check()
     assert world.manager.writes == []
 
-    world.manager.strands["10.0.0.1"].answering = True
+    world.manager.strands[ONE].answering = True
     world.check()
-    assert world.manager.writes == [("10.0.0.1", 20)]
+    assert world.manager.writes == [(ONE, 20)]
 
 
 def test_a_refused_restore_is_tried_again(world):
-    world.applied()
     world.check()
-    world.power_cut("10.0.0.1")
-    world.manager.strands["10.0.0.1"].refuses = True
-
-    world.check()
-    world.manager.strands["10.0.0.1"].refuses = False
-    world.check()
-
-    assert world.manager.writes == [("10.0.0.1", 20), ("10.0.0.1", 20)]
-    assert world.manager.strands["10.0.0.1"].brightness == 20
-
-
-def test_a_group_dapple_never_set_a_brightness_for_is_left_alone(world):
-    world.applied(brightness=None)
-    world.check()
-    world.power_cut("10.0.0.1")
+    world.power_cut(ONE)
+    world.manager.strands[ONE].refuses = True
 
     world.check()
-
-    assert world.manager.writes == []
-    assert world.changed == []
-
-
-def test_a_group_that_was_never_applied_to_is_left_alone(world):
-    world.check()
-    world.power_cut("10.0.0.1")
-
+    world.manager.strands[ONE].refuses = False
+    world.wait(60)
     world.check()
 
-    assert world.manager.writes == []
+    assert world.manager.writes == [(ONE, 20), (ONE, 20)]
+    assert world.manager.strands[ONE].brightness == 20
 
 
 def test_restoring_leaves_state_json_alone(world):
     """state.json is what Dapple was asked for, and nobody asked for this."""
-    world.applied()
-    before = world.state.get("tree").applied_at
+    world.state.record("tree", Pattern(slots=[Slot(rgbw=(255, 0, 0, 0))], brightness=60))
+    before = world.state.get("tree")
     world.check()
-    world.power_cut("10.0.0.1")
+    world.power_cut(ONE)
 
     world.check()
 
-    assert world.state.get("tree").applied_at == before
+    assert world.manager.writes == [(ONE, 20)]
+    assert world.state.get("tree") == before
 
 
 def test_firmware_that_reports_no_uptime_is_ignored(world):
-    world.applied()
     for strand in world.manager.strands.values():
         strand.answering = False
 
@@ -278,38 +345,51 @@ def test_firmware_that_reports_no_uptime_is_ignored(world):
     assert not world.path.exists()
 
 
+def test_an_unchanged_strand_writes_nothing_to_disk(world):
+    """This runs every minute, and the data folder may be on an SD card."""
+    world.check()
+    world.path.unlink()
+
+    world.wait(60)
+    world.check()
+
+    assert not world.path.exists()
+
+
 # ---- the store -------------------------------------------------------------
 
 
-def test_boot_times_survive_a_restart(tmp_path):
-    BootStore(tmp_path / "boots.json").set("10.0.0.1", 123.5)
+def test_boot_times_and_levels_survive_a_restart(tmp_path):
+    BootStore(tmp_path / "boots.json").set(ONE, 123.5, 40)
 
-    assert BootStore(tmp_path / "boots.json").get("10.0.0.1") == 123.5
+    assert BootStore(tmp_path / "boots.json").get(ONE) == (123.5, 40)
 
 
 def test_a_damaged_file_starts_empty(tmp_path, caplog):
     path = tmp_path / "boots.json"
     path.write_text("{not json")
 
-    assert BootStore(path).get("10.0.0.1") is None
+    assert BootStore(path).get(ONE) is None
     assert "Could not read" in caplog.text
 
 
 def test_a_failed_write_is_not_raised(tmp_path):
-    """Nothing here is worth failing over: at worst one restore gets repeated or missed."""
+    """Nothing here is worth failing over: at worst one restore gets missed."""
     (tmp_path / "not-a-folder").write_text("")
     store = BootStore(tmp_path / "not-a-folder" / "boots.json")
 
-    store.set("10.0.0.1", 1.0)
+    store.set(ONE, 1.0, 20)
 
     assert store.writable is False
-    assert store.get("10.0.0.1") == 1.0
+    assert store.get(ONE) == (1.0, 20)
 
 
 def test_the_file_is_plain_json(tmp_path):
-    BootStore(tmp_path / "boots.json").set("10.0.0.1", 5.0)
+    BootStore(tmp_path / "boots.json").set(ONE, 5.0, 20)
 
-    assert json.loads((tmp_path / "boots.json").read_text()) == {"10.0.0.1": 5.0}
+    assert json.loads((tmp_path / "boots.json").read_text()) == {
+        ONE: {"boot": 5.0, "brightness": 20}
+    }
 
 
 # ---- the loop --------------------------------------------------------------

@@ -8,7 +8,7 @@ app/devices.py    xled wrapper, and DeviceGroup — where per-group offsets live
 app/config.py     groups and strands: config.yaml, and the Strands tab's edits
 app/presets.py    /data/presets.json, written atomically
 app/state.py      /data/state.json — what each group was last set to
-app/reboots.py    /data/boots.json — restores brightness after a power cut
+app/reboots.py    /data/boots.json — each strand's boot time and level, for after a power cut
 app/actions.py    apply / brightness / on / off, shared by the routes and MQTT
 app/mqtt.py       Home Assistant discovery: each group as an MQTT light
 app/models.py     pydantic models shared by the API and the stores
@@ -351,12 +351,14 @@ order problem obvious), `--off`, `--dry-run`. `--help` has the rest.
   the OS TCP timeout. `Device._apply_timeout` patches the session's `send` — `Session.request`
   alone isn't enough, because the auth handshake goes around it.
 - A power cut resets brightness to 100, and nothing else. Gestalt's `uptime` is a string of
-  milliseconds that restarts at boot. `RebootWatcher` (`app/reboots.py`) reads it every minute, works
-  out the boot time, and if that's over 5 minutes later than the last one saved and the strand is
-  still at 100, sends the group's brightness from `state.json` once. Restoring never writes
-  `state.json`. A strand seen for the first time is only recorded. If the firmware keeps uptime in
-  32 bits of milliseconds it wraps about every 50 days, which would look like one reboot: at worst,
-  one strand sitting at 100 by choice is set back. That hasn't been tested.
+  milliseconds that restarts at boot. `RebootWatcher` (`app/reboots.py`) reads it and the brightness
+  every minute and saves both to `boots.json`. A reboot is a boot time over 30 seconds later than the
+  last one read, or over 5 minutes later than the saved one just after Dapple starts. If the strand is still at 100, it gets
+  its saved brightness back, once. A strand seen for the first time is only recorded. This reads the
+  level from the strand rather than `state.json`, which can't know about a level set in the Twinkly
+  app, or one followed by a preset with no brightness. If uptime wraps at 32 bits of milliseconds
+  (about 50 days, untested), that reads as a reboot, which is harmless unless someone set 100 in the
+  last minute: a strand at any other level isn't at 100, and one saved at 100 needs nothing.
 - Verified hardware: Twinkly strands on firmware 2.9.1, family G, 250 LEDs, RGBW. Single-frame
   movies are accepted on that firmware.
 

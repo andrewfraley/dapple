@@ -119,9 +119,11 @@ Dapple enforces `-1/-1`. Timer writes go through `Device._post_timer` and always
 Schedules run in the container's `TZ`, one zone per install (the Supervisor sets it on the add-on).
 Don't store a zone in `config.yaml` or take one from the browser, which is only compared with it.
 
-**Brightness is restored once per reboot, never on a timer.** `RebootWatcher` acts only when a
-strand's boot time moved forward and it's still at the firmware's 100, so changes from the Twinkly
-app survive. It goes through `GroupActions.restore_brightness` and doesn't write `state.json`.
+**Brightness is restored once per reboot, never on a timer.** `RebootWatcher` acts only on a real
+reboot of a strand that's still at the firmware's 100, so changes from the Twinkly app survive. The
+level comes from its own once-a-minute readback in `boots.json`, not `state.json`: applying a preset
+with no brightness forgets the level there while the strand keeps showing it. It goes through
+`GroupActions.restore_brightness` and doesn't write `state.json`.
 
 ## API shape
 

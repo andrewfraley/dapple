@@ -246,12 +246,13 @@ A few things are worth knowing:
 ## After a power cut
 
 When lights lose power, they come back with their pattern and schedule but at full brightness.
-Dapple notices they restarted and sets them back to the last brightness it sent, usually within a
-minute. If Dapple was off too, it does this when it starts again.
+Dapple notices they restarted and sets them back to the brightness they were at, usually within a
+minute. It doesn't matter where you set that level: Dapple, Home Assistant and the Twinkly app all
+count. If Dapple was off too, it does this when it starts again.
 
-Two things it won't do: it only knows about brightness set through Dapple or through Home Assistant
-via Dapple, so a level you set in the Twinkly app isn't what comes back. And if you've already
-changed the brightness since the power came back, it leaves your choice alone.
+Dapple checks the lights once a minute, so a change made less than a minute before the power went
+may not be the one that comes back. And if you've already changed the brightness since the power
+came back, it leaves your choice alone.
 
 ---
 
@@ -301,7 +302,7 @@ Everything Dapple remembers lives in the `data` folder next to `docker-compose.y
 |---|---|
 | `config.yaml` | your strands, their addresses, which group each is in, and your Home Assistant connection (including its password, so keep the folder private) |
 | `presets.json` | your saved patterns |
-| `boots.json` | when each strand last started, which is how Dapple notices a power cut |
+| `boots.json` | when each strand last started and its brightness, so Dapple can put that back after a power cut |
 | `state.json` | the pattern Dapple last sent to each group (the lights may have been changed since, from the Twinkly app) |
 
 Back up that folder and you've backed up everything. It's all plain text, so you can read and

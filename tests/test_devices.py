@@ -831,11 +831,11 @@ def boot_manager():
     return manager, controls
 
 
-def test_brightness_can_be_limited_to_one_strand():
-    """Only the strand that rebooted lost it; its neighbour may have been changed."""
+def test_a_restore_sets_each_strand_to_its_own_level_and_no_others():
+    """Only a strand that rebooted lost its level; its neighbour may have another."""
     manager, controls = boot_manager()
 
-    results = asyncio.run(manager.set_brightness("tree", 20, hosts={"10.0.0.2"}))
+    results = asyncio.run(manager.set_strand_brightness("tree", {"10.0.0.2": 20}))
 
     assert [result.host for result in results] == ["10.0.0.2"]
     assert controls["10.0.0.1"].brightness is None

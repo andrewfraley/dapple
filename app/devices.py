@@ -566,13 +566,18 @@ class DeviceManager:
 
         return await self._fan_out(group.devices, apply)
 
-    async def set_brightness(
-        self, group_id: str, value: int, hosts: set[str] | None = None
+    async def set_brightness(self, group_id: str, value: int) -> list[DeviceResult]:
+        group = self.group(group_id)
+        return await self._fan_out(group.devices, lambda device: device.set_brightness(value))
+
+    async def set_strand_brightness(
+        self, group_id: str, values: dict[str, int]
     ) -> list[DeviceResult]:
-        devices = self.group(group_id).devices
-        if hosts is not None:
-            devices = [device for device in devices if device.host in hosts]
-        return await self._fan_out(devices, lambda device: device.set_brightness(value))
+        """A level per strand, for restoring them after a power cut."""
+        devices = [device for device in self.group(group_id).devices if device.host in values]
+        return await self._fan_out(
+            devices, lambda device: device.set_brightness(values[device.host])
+        )
 
     async def turn_on(self, group_id: str) -> list[DeviceResult]:
         group = self.group(group_id)
